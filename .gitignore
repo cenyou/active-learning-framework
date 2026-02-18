@@ -15,5 +15,4 @@ build/
 # ignore checkpoint files
 *checkpoint.ipynb
 *checkpoint.py
-conda-configuration.yml
 add_header.py
