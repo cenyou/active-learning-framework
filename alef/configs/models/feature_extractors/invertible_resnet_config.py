@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List
+from pydantic import BaseSettings
 from alef.configs.models.feature_extractors.base_feature_extractor_config import BaseFeatureExtractorConfig
 
 

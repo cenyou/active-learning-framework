@@ -15,17 +15,17 @@
 import numpy as np
 import gpflow
 import tensorflow as tf
-from typing import Tuple, List, Sequence
-from gpflow.utilities import set_trainable
-
-from tensorflow_probability import distributions as tfd
-
-from alef.kernels.multi_output_kernels.base_transfer_kernel import BaseTransferKernel
-from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
+import tensorflow_probability as tfp
+from typing import Tuple, Union, List, Sequence, Dict
+from gpflow.utilities import print_summary, set_trainable
 
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
+from tensorflow_probability import distributions as tfd
 
+from alef.utils.gpflow_addon.kronecker_delta_kernel import Delta
+from alef.kernels.multi_output_kernels.base_transfer_kernel import BaseTransferKernel
+from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 
 class FilterKernel(gpflow.kernels.Kernel):
     def __init__(
@@ -33,8 +33,8 @@ class FilterKernel(gpflow.kernels.Kernel):
         output_dim: int,
         pass_index: Sequence,
         *,
-        active_dims=None,
-        name=None,
+        active_dims = None,
+        name = None,
     ):
         super().__init__(active_dims=active_dims, name=name)
         self.output_dim = output_dim
@@ -43,16 +43,18 @@ class FilterKernel(gpflow.kernels.Kernel):
         mask = np.zeros([self.output_dim, self.output_dim], dtype=bool)
         mask[pass_index[0], pass_index[1]] = True
         mask[pass_index[1], pass_index[0]] = True
-
+        
         self.B = tf.where(
-            mask, f64(tf.ones([self.output_dim, self.output_dim])), f64(tf.zeros([self.output_dim, self.output_dim]))
+            mask,
+            f64(tf.ones([self.output_dim, self.output_dim])),
+            f64(tf.zeros([self.output_dim, self.output_dim]))
         )
-
+    
     @property
     def B_diag(self):
         return tf.linalg.diag_part(self.B)
 
-    def K(self, X, X2=None):
+    def K(self, X, X2 = None):
         shape_constraints = [
             (X, [..., "N", 1]),
         ]
@@ -65,7 +67,7 @@ class FilterKernel(gpflow.kernels.Kernel):
             X2 = X
         else:
             X2 = tf.cast(X2[..., 0], tf.int32)
-
+        
         B = self.B
 
         return tf.gather(tf.transpose(tf.gather(B, X2)), X)
@@ -76,13 +78,11 @@ class FilterKernel(gpflow.kernels.Kernel):
         B_diag = self.B_diag
         return tf.gather(B_diag, X)
 
-
 class FlexibleTransferKernel(BaseTransferKernel):
     """
     X: [N, D+1], the last column is binary
     D: input_dimension
     """
-
     def __init__(
         self,
         variance_list: List,
@@ -96,21 +96,17 @@ class FlexibleTransferKernel(BaseTransferKernel):
         active_on_single_dimension: bool,
         active_dimension: int,
         name: str,
-        **kwargs,
+        fix_kernel: bool=False,
+        assign_values: bool=False,
+        parameter_values: Dict={},
+        **kwargs
     ):
         P = output_dimension
-        assert P == 2  # only support 1 source right now
+        assert P == 2 # only support 1 source right now
         assert len(variance_list) == 3
         assert len(lengthscale_list) == 3
-        super().__init__(
-            input_dimension,
-            P,
-            active_on_single_dimension,
-            active_dimension,
-            name,
-            **kwargs,
-        )
-
+        super().__init__(input_dimension, P, active_on_single_dimension, active_dimension, name, **kwargs,)
+        
         var_s = variance_list[0]
         var_st = variance_list[1]
         var_t = variance_list[2]
@@ -120,7 +116,7 @@ class FlexibleTransferKernel(BaseTransferKernel):
         leng_t = lengthscale_list[2]
 
         def get_lg(leng):
-            if hasattr(leng, "__len__"):
+            if hasattr(leng, '__len__'):
                 if len(leng) == 1:
                     lg = f64(np.repeat(leng[0], self.num_active_dimensions))
                 else:
@@ -129,58 +125,61 @@ class FlexibleTransferKernel(BaseTransferKernel):
             else:
                 lg = f64(np.repeat(leng, self.num_active_dimensions))
             return lg
-
+        
         k_object = self.pick_kernel_object(latent_kernel)
-
+        
         k_s = k_object(
             variance=f64(var_s),
             lengthscales=get_lg(leng_s),
             active_dims=tf.range(self.num_active_dimensions),
-            name="kernel_s",
+            name='kernel_s'
         )
         k_st = k_object(
             variance=f64(var_st),
             lengthscales=get_lg(leng_st),
             active_dims=tf.range(self.num_active_dimensions),
-            name="kernel_st",
+            name='kernel_st'
         )
         k_t = k_object(
             variance=f64(var_t),
             lengthscales=get_lg(leng_t),
             active_dims=tf.range(self.num_active_dimensions),
-            name="kernel_t",
+            name='kernel_t'
         )
-
-        self.kernel = (
-            FilterKernel(2, [0, 0], active_dims=[self.num_active_dimensions]) * k_s
-            + FilterKernel(2, [0, 1], active_dims=[self.num_active_dimensions]) * k_st
-            + FilterKernel(2, [1, 1], active_dims=[self.num_active_dimensions]) * k_t
-        )
-
+        
+        self.kernel = FilterKernel(2, [0, 0], active_dims=[self.num_active_dimensions]) * k_s + \
+                    FilterKernel(2, [0, 1], active_dims=[self.num_active_dimensions]) * k_st + \
+                    FilterKernel(2, [1, 1], active_dims=[self.num_active_dimensions]) * k_t 
+        
         if add_prior:
             self.assign_prior(lengthscale_prior_parameters, variance_prior_parameters)
+
+        if assign_values:
+            self.assign_parameters(parameter_values)
+        if fix_kernel:
+            set_trainable(self.kernel, False)
 
     @property
     def num_latent_gps(self):
         return 3
-
+    
     @property
     def latent_kernels(self):
         return [self.kernel.kernels[i].kernels[1] for i in range(3)]
-
+    
     def assign_prior(self, lengthscale_prior_parameters, variance_prior_parameters):
         a_lengthscale, b_lengthscale = lengthscale_prior_parameters
         loc, std = variance_prior_parameters
 
         for k in self.latent_kernels:
             k.variance.prior = tfd.TruncatedNormal(
-                loc=f64(loc), scale=f64(std), low=f64(1e-6), high=f64(30), name="kernel_var_prior_TruncatedNormal"
-            )
+                loc = f64(loc), scale = f64(std),
+                low = f64(1e-6), high = f64(30),
+                name='kernel_var_prior_TruncatedNormal')
             k.lengthscales.prior = tfd.Gamma(
                 f64(np.repeat(a_lengthscale, self.num_active_dimensions)),
                 f64(np.repeat(b_lengthscale, self.num_active_dimensions)),
-                name="kernel_len_prior_Gamma",
-            )
+                name='kernel_len_prior_Gamma')
 
     def get_source_parameters_trainable(self):
         return self.kernel.kernels[0].kernels[1].lengthscales.trainable
@@ -193,41 +192,40 @@ class FlexibleTransferKernel(BaseTransferKernel):
         return self.kernel.kernels[2].kernels[1].lengthscales.trainable
 
     def set_target_parameters_trainable(self, target_trainable: bool):
-        self.output_dimension
+        P = self.output_dimension
         set_trainable(self.kernel.kernels[1].kernels[1], target_trainable)
         set_trainable(self.kernel.kernels[2].kernels[1], target_trainable)
 
-
 if __name__ == "__main__":
-    B = FilterKernel(2, [0, 0])
-    print(B(np.array([[0.0]])))
-    print(B(np.array([[0.0]]), np.array([[1.0]])))
-    print(B(np.array([[1.0]]), np.array([[0.0]])))
-    print(B(np.array([[1.0]])))
-    print("###")
-    B = FilterKernel(2, [1, 0])
-    print(B(np.array([[0.0]])))
-    print(B(np.array([[0.0]]), np.array([[1.0]])))
-    print(B(np.array([[1.0]]), np.array([[0.0]])))
-    print(B(np.array([[1.0]])))
-    print("###")
-    B = FilterKernel(2, [0, 1])
-    print(B(np.array([[0.0]])))
-    print(B(np.array([[0.0]]), np.array([[1.0]])))
-    print(B(np.array([[1.0]]), np.array([[0.0]])))
-    print(B(np.array([[1.0]])))
-    print("###")
-    B = FilterKernel(2, [1, 1])
-    print(B(np.array([[0.0]])))
-    print(B(np.array([[0.0]]), np.array([[1.0]])))
-    print(B(np.array([[1.0]]), np.array([[0.0]])))
-    print(B(np.array([[1.0]])))
-    print("###")
-
-    k = FlexibleTransferKernel(
-        [1.0, 1.0, 1.0], [1, 1, 1], 2, 2, False, None, None, LatentKernel.MATERN52, False, None, "name_hello"
+    B = FilterKernel(2, [0,0])
+    print(B( np.array([[0.0]]) ))
+    print(B( np.array([[0.0]]), np.array([[1.0]]) ))
+    print(B( np.array([[1.0]]), np.array([[0.0]]) ))
+    print(B( np.array([[1.0]]) ))
+    print('###')
+    B = FilterKernel(2, [1,0])
+    print(B( np.array([[0.0]]) ))
+    print(B( np.array([[0.0]]), np.array([[1.0]]) ))
+    print(B( np.array([[1.0]]), np.array([[0.0]]) ))
+    print(B( np.array([[1.0]]) ))
+    print('###')
+    B = FilterKernel(2, [0,1])
+    print(B( np.array([[0.0]]) ))
+    print(B( np.array([[0.0]]), np.array([[1.0]]) ))
+    print(B( np.array([[1.0]]), np.array([[0.0]]) ))
+    print(B( np.array([[1.0]]) ))
+    print('###')
+    B = FilterKernel(2, [1,1])
+    print(B( np.array([[0.0]]) ))
+    print(B( np.array([[0.0]]), np.array([[1.0]]) ))
+    print(B( np.array([[1.0]]), np.array([[0.0]]) ))
+    print(B( np.array([[1.0]]) ))
+    print('###')
+    
+    k = FlexibleTransferKernel([1.0, 1.0, 1.0], [1, 1, 1], 2, 2, False, None, None, LatentKernel.MATERN52, False, None, 'name_hello')
+    print(
+        k(np.array([[0.5, 0.4, 1.0]]), np.array([[0.2, 0.2, 0.0]]))
     )
-    print(k(np.array([[0.5, 0.4, 1.0]]), np.array([[0.2, 0.2, 0.0]])))
     """
     print_summary(k)
     k.set_source_parameters_trainable(False)

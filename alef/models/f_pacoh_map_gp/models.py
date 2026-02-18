@@ -1,35 +1,3 @@
-# Copyright (c) 2024 Robert Bosch GmbH
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-import torch
-import gpytorch
-import math
-from collections import OrderedDict
-from typing import Optional
-from alef.models.f_pacoh_map_gp.util import find_root_by_bounding
-from gpytorch.constraints import Positive
-
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.distributions import Distribution
-from torch.distributions import TransformedDistribution, AffineTransform
-from gpytorch.kernels import Kernel
-from gpytorch.functions import RBFCovariance
-from gpytorch.models.approximate_gp import ApproximateGP
-from gpytorch.variational import CholeskyVariationalDistribution
-from gpytorch.variational import VariationalStrategy
-
 """
 This is from the attached code of paper
 Jonas Rothfuss, Christopher Koenig, Alisa Rupenyan, Andreas Krause, CoRL 2022,
@@ -43,7 +11,20 @@ see folder ./meta_bo/models/models.py
 Copyright (c) 2022 Jonas Rothfuss, licensed under the MIT License
 
 """
+import torch
+import gpytorch
+import math
+from collections import OrderedDict
+from typing import Optional
+from alef.models.f_pacoh_map_gp.util import find_root_by_bounding
+from gpytorch.constraints import Positive
 
+""" ----------------------------------------------------"""
+""" ------------ Probability Distributions ------------ """
+""" ----------------------------------------------------"""
+
+from torch.distributions import Distribution
+from torch.distributions import TransformedDistribution, AffineTransform
 
 class AffineTransformedDistribution(TransformedDistribution):
     r"""
@@ -98,6 +79,7 @@ class UnnormalizedExpDist(Distribution):
 
 
 class FactorizedNormal(Distribution):
+
     def __init__(self, loc, scale, summation_axis=-1):
         self.normal_dist = torch.distributions.Normal(loc, scale)
         self.summation_axis = summation_axis
@@ -107,6 +89,7 @@ class FactorizedNormal(Distribution):
 
 
 class EqualWeightedMixtureDist(Distribution):
+
     def __init__(self, dists, batched=False, num_dists=None):
         self.batched = batched
         if batched:
@@ -141,7 +124,7 @@ class EqualWeightedMixtureDist(Distribution):
             means = torch.stack([dist.mean for dist in self.dists], dim=0)
             vars = torch.stack([dist.variance for dist in self.dists], dim=0)
 
-        var1 = torch.mean((means - torch.mean(means, dim=0)) ** 2, dim=0)
+        var1 = torch.mean((means - torch.mean(means, dim=0))**2, dim=0)
         var2 = torch.mean(vars, dim=0)
 
         # check shape
@@ -168,13 +151,14 @@ class EqualWeightedMixtureDist(Distribution):
         return torch.mean(cum_p, dim=0)
 
     def icdf(self, quantile):
-        left = -1e8 * torch.ones(quantile.shape)
-        right = +1e8 * torch.ones(quantile.shape)
+        left = - 1e8 * torch.ones(quantile.shape)
+        right = + 1e8 * torch.ones(quantile.shape)
         fun = lambda x: self.cdf(x) - quantile
         return find_root_by_bounding(fun, left, right)
 
 
 class CatDist(Distribution):
+
     def __init__(self, dists, reduce_event_dim=True):
         assert all([len(dist.event_shape) == 1 for dist in dists])
         assert all([len(dist.batch_shape) == 0 for dist in dists])
@@ -183,10 +167,10 @@ class CatDist(Distribution):
         self._event_shape = torch.Size((sum([dist.event_shape[0] for dist in self.dists]),))
 
     def sample(self, sample_shape=torch.Size()):
-        return self._sample(sample_shape, sample_fn="sample")
+        return self._sample(sample_shape, sample_fn='sample')
 
     def rsample(self, sample_shape=torch.Size()):
-        return self._sample(sample_shape, sample_fn="rsample")
+        return self._sample(sample_shape, sample_fn='rsample')
 
     def log_prob(self, value):
         idx = 0
@@ -194,13 +178,13 @@ class CatDist(Distribution):
         for dist in self.dists:
             n = dist.event_shape[0]
             if value.ndim == 1:
-                val = value[idx : idx + n]
+                val = value[idx:idx+n]
             elif value.ndim == 2:
-                val = value[:, idx : idx + n]
+                val = value[:, idx:idx + n]
             elif value.ndim == 2:
-                val = value[:, :, idx : idx + n]
+                val = value[:, :, idx:idx + n]
             else:
-                raise NotImplementedError("Can only handle values up to 3 dimensions")
+                raise NotImplementedError('Can only handle values up to 3 dimensions')
             log_probs.append(dist.log_prob(val))
             idx += n
 
@@ -212,7 +196,7 @@ class CatDist(Distribution):
             return torch.sum(torch.stack(log_probs, dim=0), dim=0)
         return torch.stack(log_probs, dim=0)
 
-    def _sample(self, sample_shape, sample_fn="sample"):
+    def _sample(self, sample_shape, sample_fn='sample'):
         return torch.cat([getattr(d, sample_fn)(sample_shape) for d in self.dists], dim=-1)
 
 
@@ -220,19 +204,10 @@ class CatDist(Distribution):
 """ ------------------ Neural Network ------------------"""
 """ ----------------------------------------------------"""
 
-
 class NeuralNetwork(torch.nn.Sequential):
     """Trainable neural network kernel function for GPs."""
-
-    def __init__(
-        self,
-        input_dim=2,
-        output_dim=2,
-        layer_sizes=(64, 64),
-        nonlinearlity=torch.tanh,
-        weight_norm=False,
-        prefix="",
-    ):
+    def __init__(self, input_dim=2, output_dim=2, layer_sizes=(64, 64), nonlinearlity=torch.tanh,
+                 weight_norm=False, prefix='',):
         super(NeuralNetwork, self).__init__()
         self.nonlinearlity = nonlinearlity
         self.n_layers = len(layer_sizes)
@@ -246,35 +221,38 @@ class NeuralNetwork(torch.nn.Sequential):
         self.layers = []
         prev_size = input_dim
         for i, size in enumerate(layer_sizes):
-            setattr(self, self.prefix + "fc_%i" % (i + 1), _normalize(torch.nn.Linear(prev_size, size)))
+            setattr(self, self.prefix + 'fc_%i'%(i+1), _normalize(torch.nn.Linear(prev_size, size)))
             prev_size = size
-        setattr(self, self.prefix + "out", _normalize(torch.nn.Linear(prev_size, output_dim)))
+        setattr(self, self.prefix + 'out', _normalize(torch.nn.Linear(prev_size, output_dim)))
 
     def forward(self, x):
         output = x
-        for i in range(1, self.n_layers + 1):
-            output = getattr(self, self.prefix + "fc_%i" % i)(output)
+        for i in range(1, self.n_layers+1):
+            output = getattr(self, self.prefix + 'fc_%i'%i)(output)
             output = self.nonlinearlity(output)
-        output = getattr(self, self.prefix + "out")(output)
+        output = getattr(self, self.prefix + 'out')(output)
         return output
 
     def forward_parametrized(self, x, params):
         output = x
         param_idx = 0
         for i in range(1, self.n_layers + 1):
-            output = F.linear(output, params[param_idx], params[param_idx + 1])
+            output = F.linear(output, params[param_idx], params[param_idx+1])
             output = self.nonlinearlity(output)
             param_idx += 2
-        output = F.linear(output, params[param_idx], params[param_idx + 1])
+        output = F.linear(output, params[param_idx], params[param_idx+1])
         return output
-
 
 """ ----------------------------------------------------"""
 """ ------------ Vectorized Neural Network -------------"""
 """ ----------------------------------------------------"""
 
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 class VectorizedModel:
+
     def __init__(self, input_dim, output_dim):
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -289,11 +267,11 @@ class VectorizedModel:
         return list(self.named_parameters().values())
 
     def set_parameter(self, name, value):
-        if len(name.split(".")) == 1:
+        if len(name.split('.')) == 1:
             setattr(self, name, value)
         else:
-            remaining_name = ".".join(name.split(".")[1:])
-            getattr(self, name.split(".")[0]).set_parameter(remaining_name, value)
+            remaining_name = ".".join(name.split('.')[1:])
+            getattr(self, name.split('.')[0]).set_parameter(remaining_name, value)
 
     def set_parameters(self, param_dict):
         for name, value in param_dict.items():
@@ -315,7 +293,6 @@ class VectorizedModel:
             idx = idx_next
         assert idx_next == value.shape[-1]
 
-
 class LinearVectorized(VectorizedModel):
     def __init__(self, input_dim, output_dim):
         super().__init__(input_dim, output_dim)
@@ -326,7 +303,7 @@ class LinearVectorized(VectorizedModel):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.weight = _kaiming_uniform_batched(self.weight, fan=self.input_dim, a=math.sqrt(5), nonlinearity="tanh")
+        self.weight = _kaiming_uniform_batched(self.weight, fan=self.input_dim, a=math.sqrt(5), nonlinearity='tanh')
         if self.bias is not None:
             fan_in = self.output_dim
             bound = 1 / math.sqrt(fan_in)
@@ -363,12 +340,11 @@ class LinearVectorized(VectorizedModel):
         return OrderedDict(bias=self.bias, weight=self.weight)
 
     def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
-
+        return self.forward( *args, **kwargs)
 
 class NeuralNetworkVectorized(VectorizedModel):
-    """Trainable neural network that batches multiple sets of parameters. That is, each"""
-
+    """Trainable neural network that batches multiple sets of parameters. That is, each
+    """
     def __init__(self, input_dim, output_dim, layer_sizes=(64, 64), nonlinearlity=torch.tanh):
         super().__init__(input_dim, output_dim)
 
@@ -377,16 +353,16 @@ class NeuralNetworkVectorized(VectorizedModel):
 
         prev_size = input_dim
         for i, size in enumerate(layer_sizes):
-            setattr(self, "fc_%i" % (i + 1), LinearVectorized(prev_size, size))
+            setattr(self, 'fc_%i'%(i+1), LinearVectorized(prev_size, size))
             prev_size = size
-        setattr(self, "out", LinearVectorized(prev_size, output_dim))
+        setattr(self, 'out', LinearVectorized(prev_size, output_dim))
 
     def forward(self, x):
         output = x
         for i in range(1, self.n_layers + 1):
-            output = getattr(self, "fc_%i" % i)(output)
+            output = getattr(self, 'fc_%i' % i)(output)
             output = self.nonlinearlity(output)
-        output = getattr(self, "out")(output)
+        output = getattr(self, 'out')(output)
         return output
 
     def parameter_shapes(self):
@@ -394,14 +370,14 @@ class NeuralNetworkVectorized(VectorizedModel):
 
         # hidden layers
         for i in range(1, self.n_layers + 1):
-            layer_name = "fc_%i" % i
+            layer_name = 'fc_%i' % i
             for name, param in getattr(self, layer_name).parameter_shapes().items():
-                param_dict[layer_name + "." + name] = param
+                param_dict[layer_name + '.' + name] = param
 
         # last layer
-        layer_name = "out"
+        layer_name = 'out'
         for name, param in getattr(self, layer_name).parameter_shapes().items():
-            param_dict[layer_name + "." + name] = param
+            param_dict[layer_name + '.' + name] = param
 
         return param_dict
 
@@ -410,25 +386,23 @@ class NeuralNetworkVectorized(VectorizedModel):
 
         # hidden layers
         for i in range(1, self.n_layers + 1):
-            layer_name = "fc_%i" % i
+            layer_name = 'fc_%i' % i
             for name, param in getattr(self, layer_name).named_parameters().items():
-                param_dict[layer_name + "." + name] = param
+                param_dict[layer_name + '.' + name] = param
 
         # last layer
-        layer_name = "out"
+        layer_name = 'out'
         for name, param in getattr(self, layer_name).named_parameters().items():
-            param_dict[layer_name + "." + name] = param
+            param_dict[layer_name + '.' + name] = param
 
         return param_dict
 
     def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
-
+        return self.forward( *args, **kwargs)
 
 """ Initialization Helpers """
 
-
-def _kaiming_uniform_batched(tensor, fan, a=0.0, nonlinearity="tanh"):
+def _kaiming_uniform_batched(tensor, fan, a=0.0, nonlinearity='tanh'):
     gain = nn.init.calculate_gain(nonlinearity, a)
     std = gain / math.sqrt(fan)
     bound = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
@@ -439,6 +413,10 @@ def _kaiming_uniform_batched(tensor, fan, a=0.0, nonlinearity="tanh"):
 """ ----------------------------------------------------"""
 """ ------------------ GP components -------------------"""
 """ ----------------------------------------------------"""
+
+from gpytorch.means import Mean
+from gpytorch.kernels import Kernel
+from gpytorch.functions import RBFCovariance
 
 
 def _mul_broadcast_shape(*shapes, error_msg=None):
@@ -468,7 +446,6 @@ def _mul_broadcast_shape(*shapes, error_msg=None):
 
     return torch.Size(final_size)
 
-
 class ConstantMeanLight(gpytorch.means.Mean):
     def __init__(self, constant=torch.ones(1), batch_shape=torch.Size()):
         super(ConstantMeanLight, self).__init__()
@@ -483,43 +460,37 @@ class ConstantMeanLight(gpytorch.means.Mean):
 
 
 class SEKernelLight(gpytorch.kernels.Kernel):
+
     def __init__(self, lengthscale=torch.tensor([1.0]), output_scale=torch.tensor(1.0)):
-        super(SEKernelLight, self).__init__(batch_shape=(lengthscale.shape[0],))
+        super(SEKernelLight, self).__init__(batch_shape=(lengthscale.shape[0], ))
         self.length_scale = lengthscale
         self.ard_num_dims = lengthscale.shape[-1]
         self.output_scale = output_scale
         self.postprocess_rbf = lambda dist_mat: self.output_scale * dist_mat.div_(-2).exp_()
 
+
     def forward(self, x1, x2, diag=False, **params):
-        if x1.requires_grad or x2.requires_grad or (self.ard_num_dims is not None and self.ard_num_dims > 1) or diag:
+        if (
+                x1.requires_grad
+                or x2.requires_grad
+                or (self.ard_num_dims is not None and self.ard_num_dims > 1)
+                or diag
+        ):
             x1_ = x1.div(self.length_scale)
             x2_ = x2.div(self.length_scale)
-            return self.covar_dist(
-                x1_,
-                x2_,
-                square_dist=True,
-                diag=diag,
-                dist_postprocess_func=self.postprocess_rbf,
-                postprocess=True,
-                **params,
-            )
-        return self.output_scale * RBFCovariance().apply(
-            x1,
-            x2,
-            self.length_scale,
-            lambda x1, x2: self.covar_dist(
-                x1,
-                x2,
-                square_dist=True,
-                diag=False,
-                dist_postprocess_func=self.postprocess_rbf,
-                postprocess=False,
-                **params,
-            ),
-        )
-
+            return self.covar_dist(x1_, x2_, square_dist=True, diag=diag,
+                                   dist_postprocess_func=self.postprocess_rbf,
+                                   postprocess=True, **params)
+        return self.output_scale * RBFCovariance().apply(x1, x2, self.length_scale,
+                                     lambda x1, x2: self.covar_dist(x1, x2,
+                                                                    square_dist=True,
+                                                                    diag=False,
+                                                                    dist_postprocess_func=self.postprocess_rbf,
+                                                                    postprocess=False,
+                                                                    **params))
 
 class HomoskedasticNoiseLight(gpytorch.likelihoods.noise_models._HomoskedasticNoiseBase):
+
     def __init__(self, noise_var, *params, **kwargs):
         self.noise_var = noise_var
         self._modules = {}
@@ -533,8 +504,9 @@ class HomoskedasticNoiseLight(gpytorch.likelihoods.noise_models._HomoskedasticNo
     def noise(self, value):
         self.noise_var = value
 
-
 class GaussianLikelihoodLight(gpytorch.likelihoods._GaussianLikelihoodBase):
+
+
     def __init__(self, noise_var, batch_shape=torch.Size()):
         self.batch_shape = batch_shape
         self._modules = {}
@@ -561,9 +533,9 @@ class GaussianLikelihoodLight(gpytorch.likelihoods._GaussianLikelihoodBase):
 
 class PredictedScaleKernel(Kernel):
     """Scale kernel whose outputscale is dependent on X. It takes the last slice
-    of the last dimention and treats it as raw sigma. The resulting kernel
-    reads as:
-    $$k(x,x') = \sqrt(\sigma(x) * \sigma(x')) * k_base(x, x')$$
+       of the last dimention and treats it as raw sigma. The resulting kernel
+       reads as:
+       $$k(x,x') = \sqrt(\sigma(x) * \sigma(x')) * k_base(x, x')$$
     """
 
     def __init__(self, base_kernel: torch.nn.Module, outputscale_constraint=None, **kwargs):
@@ -593,20 +565,13 @@ class PredictedScaleKernel(Kernel):
     def num_outputs_per_input(self, x1, x2):
         return self.base_kernel.num_outputs_per_input(x1, x2)
 
-
 class LearnedGPRegressionModel(gpytorch.models.ExactGP):
     """GP model which can take a learned mean and learned kernel function."""
-
-    def __init__(
-        self,
-        train_x: torch.Tensor,
-        train_y: torch.Tensor,
-        likelihood: torch.nn.Module,
-        learned_kernel: Optional[torch.nn.Module] = None,
-        learned_mean: Optional[torch.nn.Module] = None,
-        mean_module: Optional[torch.nn.Module] = None,
-        covar_module: Optional[torch.nn.Module] = None,
-    ):
+    def __init__(self, train_x: torch.Tensor, train_y: torch.Tensor, likelihood: torch.nn.Module,
+                 learned_kernel: Optional[torch.nn.Module] = None,
+                 learned_mean: Optional[torch.nn.Module] = None,
+                 mean_module: Optional[torch.nn.Module] = None,
+                 covar_module: Optional[torch.nn.Module] =None):
         super(LearnedGPRegressionModel, self).__init__(train_x, train_y, likelihood)
 
         if mean_module is None:
@@ -656,27 +621,21 @@ class LearnedGPRegressionModel(gpytorch.models.ExactGP):
         return pred_dist.log_prob(y)
 
 
+from gpytorch.models.approximate_gp import ApproximateGP
+from gpytorch.variational import CholeskyVariationalDistribution
+from gpytorch.variational import VariationalStrategy
+
 class LearnedGPRegressionModelApproximate(ApproximateGP):
     """GP model which can take a learned mean and learned kernel function."""
+    def __init__(self, train_x, train_y, likelihood, learned_kernel=None, learned_mean=None, mean_module=None,
+                 covar_module=None, beta=1.0):
 
-    def __init__(
-        self,
-        train_x,
-        train_y,
-        likelihood,
-        learned_kernel=None,
-        learned_mean=None,
-        mean_module=None,
-        covar_module=None,
-        beta=1.0,
-    ):
         self.beta = beta
         self.n_train_samples = train_x.shape[0]
 
         variational_distribution = CholeskyVariationalDistribution(self.n_train_samples)
-        variational_strategy = VariationalStrategy(
-            self, train_x, variational_distribution, learn_inducing_locations=False
-        )
+        variational_strategy = VariationalStrategy(self, train_x, variational_distribution,
+                                                   learn_inducing_locations=False)
         super().__init__(variational_strategy)
 
         if mean_module is None:

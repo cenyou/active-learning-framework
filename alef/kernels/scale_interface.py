@@ -15,7 +15,6 @@
 import numpy as np
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 
-
 class StationaryKernelGPflow:
     @property
     def prior_scale(self):

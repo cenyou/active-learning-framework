@@ -13,13 +13,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from pydantic import BaseSettings
-from alef.configs.acquisition_function.bo_acquisition_functions.base_bo_acquisition_function_config import (
-    BaseBOAcquisitionFunctionConfig,
-)
-from alef.configs.acquisition_function.bo_acquisition_functions.ei_config import BasicEIConfig
-from alef.configs.acquisition_function.bo_acquisition_functions.gp_ucb_config import BasicGPUCBConfig
-from alef.configs.acquisition_function.bo_acquisition_functions.integrated_ei_config import BasicIntegratedEIConfig
+from alef.configs.acquisition_functions.bo_acquisition_functions.base_bo_acquisition_function_config import BaseBOAcquisitionFunctionConfig
+from alef.configs.acquisition_functions.bo_acquisition_functions.ei_config import BasicEIConfig
+from alef.configs.acquisition_functions.bo_acquisition_functions.gp_ucb_config import BasicGPUCBConfig
+from alef.configs.acquisition_functions.bo_acquisition_functions.integrated_ei_config import BasicIntegratedEIConfig
 from alef.enums.bayesian_optimization_enums import (
+    AcquisitionOptimizationObjectBOType,
     AcquisitionOptimizationType,
     ValidationType,
 )

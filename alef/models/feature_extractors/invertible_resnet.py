@@ -12,9 +12,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from gpflow.utilities.bijectors import positive
 import tensorflow as tf
+import tensorflow_probability as tfp
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import gpflow
 import matplotlib.pyplot as plt
 from tensorflow_probability import distributions as tfd
@@ -27,9 +29,7 @@ f64 = gpflow.utilities.to_default_float
 
 class ResidualLayer(tf.Module):
     @staticmethod
-    def create_single_weight_and_bias(
-        W_n_rows: int, W_n_cols: int, b_size: int, W_scale: float, b_scale: float, add_priors: bool = False
-    ):
+    def create_single_weight_and_bias(W_n_rows: int, W_n_cols: int, b_size: int, W_scale: float, b_scale: float, add_priors: bool = False):
         W = gpflow.Parameter(tf.random.normal([W_n_rows, W_n_cols], stddev=W_scale), trainable=True)
         b = gpflow.Parameter(tf.random.normal([b_size], stddev=b_scale), trainable=True)
         if add_priors:
@@ -39,49 +39,29 @@ class ResidualLayer(tf.Module):
         return W, b
 
     @staticmethod
-    def create_weight_and_bias_list_from_layer_list(
-        dimension: int, layer_size_list: List[int], W_scale: float, b_scale: float, add_prior: bool = False
-    ):
+    def create_weight_and_bias_list_from_layer_list(dimension: int, layer_size_list: List[int], W_scale: float, b_scale: float, add_prior: bool = False):
         weight_list = []
         bias_list = []
-        W, b = ResidualLayer.create_single_weight_and_bias(
-            dimension, layer_size_list[0], layer_size_list[0], W_scale, b_scale, add_prior
-        )
+        W, b = ResidualLayer.create_single_weight_and_bias(dimension, layer_size_list[0], layer_size_list[0], W_scale, b_scale, add_prior)
         weight_list.append(W)
         bias_list.append(b)
         for i in range(1, len(layer_size_list)):
-            W, b = ResidualLayer.create_single_weight_and_bias(
-                layer_size_list[i - 1], layer_size_list[i], layer_size_list[i], W_scale, b_scale, add_prior
-            )
+            W, b = ResidualLayer.create_single_weight_and_bias(layer_size_list[i - 1], layer_size_list[i], layer_size_list[i], W_scale, b_scale, add_prior)
             weight_list.append(W)
             bias_list.append(b)
-        W, b = ResidualLayer.create_single_weight_and_bias(
-            layer_size_list[-1], dimension, dimension, W_scale, b_scale, add_prior
-        )
+        W, b = ResidualLayer.create_single_weight_and_bias(layer_size_list[-1], dimension, dimension, W_scale, b_scale, add_prior)
         weight_list.append(W)
         bias_list.append(b)
         return weight_list, bias_list
 
-    def __init__(
-        self,
-        dimension: int,
-        set_weights: bool,
-        layer_size_list: List[int],
-        weight_list: Optional[List[tf.Variable]],
-        bias_list: Optional[List[tf.Variable]],
-        W_scale: float,
-        b_scale: float,
-        add_prior: bool = False,
-    ):
+    def __init__(self, dimension: int, set_weights: bool, layer_size_list: List[int], weight_list: Optional[List[tf.Variable]], bias_list: Optional[List[tf.Variable]], W_scale: float, b_scale: float, add_prior: bool = False):
         self.dimension = dimension
         self.c = 0.95
         if set_weights:
             self.weight_list = weight_list
             self.bias_list = bias_list
         else:
-            self.weight_list, self.bias_list = ResidualLayer.create_weight_and_bias_list_from_layer_list(
-                self.dimension, layer_size_list, W_scale, b_scale, add_prior
-            )
+            self.weight_list, self.bias_list = ResidualLayer.create_weight_and_bias_list_from_layer_list(self.dimension, layer_size_list, W_scale, b_scale, add_prior)
 
     def forward(self, X):
         out = self.mlp(X)
@@ -123,7 +103,7 @@ class InvertibleResNet(BaseFeatureExtractor, tf.Module):
         contrained_regularizer_k: int,
         add_noise_on_train_mode: bool,
         layer_noise_std: float,
-        **kwargs,
+        **kwargs
     ):
         self.dimension = input_dimension
         self.num_layers = num_layers
@@ -140,20 +120,9 @@ class InvertibleResNet(BaseFeatureExtractor, tf.Module):
         self.add_noise_on_train_mode = add_noise_on_train_mode
         self.layer_noise_std = layer_noise_std
         if share_weights:
-            weight_list, bias_list = ResidualLayer.create_weight_and_bias_list_from_layer_list(
-                self.dimension, residual_layer_size_list, W_scale, b_scale, add_prior
-            )
+            weight_list, bias_list = ResidualLayer.create_weight_and_bias_list_from_layer_list(self.dimension, residual_layer_size_list, W_scale, b_scale, add_prior)
         for i in range(0, num_layers):
-            residual_layer = ResidualLayer(
-                self.dimension,
-                set_weights=share_weights,
-                layer_size_list=residual_layer_size_list,
-                weight_list=weight_list,
-                bias_list=bias_list,
-                W_scale=W_scale,
-                b_scale=b_scale,
-                add_prior=add_prior,
-            )
+            residual_layer = ResidualLayer(self.dimension, set_weights=share_weights, layer_size_list=residual_layer_size_list, weight_list=weight_list, bias_list=bias_list, W_scale=W_scale, b_scale=b_scale, add_prior=add_prior)
             self.residual_layer_list.append(residual_layer)
 
     def get_input_dimension(self) -> int:
@@ -172,14 +141,7 @@ class InvertibleResNet(BaseFeatureExtractor, tf.Module):
 
     def regularization_loss(self, x_data: np.array) -> tf.Tensor:
         if self.add_regularization:
-            (
-                diff_norm,
-                jacob_norm,
-                divergence_sum,
-                off_diag_jacob_norm,
-                rotation_elements_norm,
-                distance_difference_capped_sum,
-            ) = self.regularizer_losses(x_data, self.contrain_regularizer_n_data, self.contrained_regularizer_k)
+            diff_norm, jacob_norm, divergence_sum, off_diag_jacob_norm, rotation_elements_norm, distance_difference_capped_sum = self.regularizer_losses(x_data, self.contrain_regularizer_n_data, self.contrained_regularizer_k)
             loss = (
                 self.regularizer_lambdas[0] * diff_norm
                 + self.regularizer_lambdas[1] * jacob_norm
@@ -225,29 +187,14 @@ class InvertibleResNet(BaseFeatureExtractor, tf.Module):
                 off_diag_jacob_norm += tf.pow(tf.norm(off_diagonals_jacob), 2.0)
                 rotation_elements_norm += tf.pow(tf.norm(rotation_elements), 2.0)
         for d in range(0, dim_x):
-            distance_difference_1 = gpflow.utilities.ops.square_distance(
-                X[:, d], X[:, d]
-            ) - l_distance * gpflow.utilities.ops.square_distance(out[:, d], out[:, d])
-            distance_difference_2 = gpflow.utilities.ops.square_distance(
-                out[:, d], out[:, d]
-            ) - l_distance * gpflow.utilities.ops.square_distance(X[:, d], X[:, d])
+            distance_difference_1 = gpflow.utilities.ops.square_distance(X[:, d], X[:, d]) - l_distance * gpflow.utilities.ops.square_distance(out[:, d], out[:, d])
+            distance_difference_2 = gpflow.utilities.ops.square_distance(out[:, d], out[:, d]) - l_distance * gpflow.utilities.ops.square_distance(X[:, d], X[:, d])
             if d == 0:
-                distance_difference_capped_sum = tf.reduce_sum(
-                    tf.math.maximum(distance_difference_1, 0.0)
-                ) + tf.reduce_sum(tf.math.maximum(distance_difference_2, 0.0))
+                distance_difference_capped_sum = tf.reduce_sum(tf.math.maximum(distance_difference_1, 0.0)) + tf.reduce_sum(tf.math.maximum(distance_difference_2, 0.0))
             else:
-                distance_difference_capped_sum += tf.reduce_sum(
-                    tf.math.maximum(distance_difference_1, 0.0)
-                ) + tf.reduce_sum(tf.math.maximum(distance_difference_2, 0.0))
+                distance_difference_capped_sum += tf.reduce_sum(tf.math.maximum(distance_difference_1, 0.0)) + tf.reduce_sum(tf.math.maximum(distance_difference_2, 0.0))
 
-        return (
-            diff_norm,
-            jacob_norm,
-            divergence_sum,
-            off_diag_jacob_norm,
-            rotation_elements_norm,
-            distance_difference_capped_sum,
-        )
+        return diff_norm, jacob_norm, divergence_sum, off_diag_jacob_norm, rotation_elements_norm, distance_difference_capped_sum
 
     def plot_warping(self, X):
         input_dimension = X.shape[1]

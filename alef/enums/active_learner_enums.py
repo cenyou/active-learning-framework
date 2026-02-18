@@ -15,31 +15,15 @@
 from enum import Enum
 
 
-class AcquisitionFunctionType(Enum):
-    PRED_VAR = 1
-    PRED_VAR_SAFETY = 2
-    PRED_VAR_COMBINED = 3
-    HYPER_BALD = 4
-    RANDOM = 5
-    PRED_ENTROPY = 6
-    PRED_ENTROPY_ALL = 7
-
-
-class BatchAcquisitionFunctionType(Enum):
-    BATCH_BALD = 1
-    HYPER_BATCH_BALD = 2
-    RANDOM = 3
-    ENTROPY = 4
-
-
 class BatchAcquisitionOptimizationType(Enum):
     GREEDY = 1
 
 
 class ValidationType(Enum):
     NEG_LOG_LIKELI = 1
-    RMSE = 2
-    RMSE_MULTIOUTPUT = 3
+    MAE = 2 # mean absolute error
+    RMSE = 3
+    RMSE_MULTIOUTPUT = 4
 
     @staticmethod
     def get_name(val_type):
@@ -50,6 +34,10 @@ class ValidationType(Enum):
         elif val_type == ValidationType.RMSE_MULTIOUTPUT:
             return "RMSEMULTIOUTPUT"
 
+
+class SafetyValidationType(Enum):
+    NONE = 0
+    SAFE_AREA = 1
 
 class OracleALAcquisitionOptimizationType(Enum):
     RANDOM_SHOOTING = 1

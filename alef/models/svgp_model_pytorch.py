@@ -28,9 +28,7 @@ from scipy.stats import norm
 class GPModel(ApproximateGP):
     def __init__(self, inducing_points, mean_function, kernel_module):
         variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
-        variational_strategy = VariationalStrategy(
-            self, inducing_points, variational_distribution, learn_inducing_locations=True
-        )
+        variational_strategy = VariationalStrategy(self, inducing_points, variational_distribution, learn_inducing_locations=True)
         super(GPModel, self).__init__(variational_strategy)
         self.mean_module = mean_function
         self.kernel_module = kernel_module
@@ -129,10 +127,10 @@ class SVGPModelPytorch(BaseModel):
                 batch_counter += 1
             print(f"Epoch {i}/{self.n_epochs} - loss: {epoch_loss}")
             if i > self.min_epochs:
-                if np.allclose(epoch_loss, previous_epoch_loss, rtol=1e-5, atol=1e-5):  # noqa: F821
+                if np.allclose(epoch_loss, previous_epoch_loss, rtol=1e-5, atol=1e-5):
                     print(f"Stopping criteria triggered at iteration {i}")
                     break
-            previous_epoch_loss = epoch_loss  # noqa: F841
+            previous_epoch_loss = epoch_loss
 
     def predict(self, x_test: torch.tensor):
         self.model.eval()
@@ -160,7 +158,7 @@ class SVGPModelPytorch(BaseModel):
         log_likelis = norm.logpdf(np.squeeze(y_test), np.squeeze(pred_mu), np.squeeze(pred_std))
         return log_likelis
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         raise NotImplementedError
 
     def entropy_predictive_dist(self, x_test: np.array) -> np.array:

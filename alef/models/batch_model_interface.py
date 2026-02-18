@@ -13,16 +13,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-from abc import ABC, abstractmethod
-
+from typing import Tuple, Optional
+from abc import ABC,abstractmethod
 
 class BatchModelInterace(ABC):
     """
-    Interface a BaseModel needs to implement if it is used for batch active learning
+    Interface a BaseModel needs to implement if it is used for batch active learning 
     """
 
     @abstractmethod
-    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> np.float:
+    def entropy_predictive_dist_full_cov(self,x_test: np.array) -> float:
         """
         Method for calculating the entropy of the combined predictive distribution for test sequence - used as acquistion function in batch active learning
 
@@ -33,3 +33,9 @@ class BatchModelInterace(ABC):
         float - entropy of combined predictive distribution
         """
         raise NotImplementedError
+
+
+
+
+    
+

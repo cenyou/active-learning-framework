@@ -15,35 +15,61 @@
 import numpy as np
 import tensorflow as tf
 import torch
-from typing import Union
+from typing import Tuple, Optional, Union, Callable
 from abc import ABC, abstractmethod
 
 from alef.enums.environment_enums import GPFramework
 
-
 class BaseDistribution(ABC):
-    """Base class for GP samplers."""
 
     def __init__(self, gp_framework: GPFramework):
         self.gp_framework = GPFramework
 
+    @property
+    def input_dimension(self):
+        raise NotImplementedError
+
     @abstractmethod
-    def draw_parameter(self, draw_hyper_prior: bool = False, draw_noise: bool = False):
+    def draw_parameter(
+        self,
+        draw_hyper_prior: bool=False,
+        draw_noise: bool=False
+    ):
         """
         draw hyper-priors, f, or noise of y|f
-
+        
         arguments:
 
         draw_hyper_prior: whether to draw parameters from hyper-priors
         draw_noise: whether to draw the noise parameter as well (noise of y|f)
+        
+        """
+        raise NotImplementedError
 
+    @abstractmethod
+    def mean(self, x_data: Union[tf.Tensor, torch.Tensor]):
+        """
+        compute GP mean(x_data), return in raw tf or torch type 
+
+        Arguments:
+        x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def mean_numpy(self, x_data: np.ndarray):
+        """
+        compute GP mean(x_data), return numpy array
+
+        Arguments:
+        x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
         """
         raise NotImplementedError
 
     @abstractmethod
     def f_sampler(self, x_data: Union[tf.Tensor, torch.Tensor]):
         """
-        compute GP( mean(x_data), kernel(x_data) ), return in raw tf or torch type
+        compute GP( mean(x_data), kernel(x_data) ), return in raw tf or torch type 
 
         Arguments:
         x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
@@ -53,7 +79,7 @@ class BaseDistribution(ABC):
     @abstractmethod
     def y_sampler(self, x_data: Union[tf.Tensor, torch.Tensor]):
         """
-        compute GP( mean(x_data), kernel(x_data) ) + noise_dist, return in raw tf or torch type
+        compute GP( mean(x_data), kernel(x_data) ) + noise_dist, return in raw tf or torch type 
 
         Arguments:
         x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
@@ -79,3 +105,4 @@ class BaseDistribution(ABC):
         x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
         """
         raise NotImplementedError
+

@@ -14,13 +14,12 @@
 
 from enum import Enum
 
-
 class InputPreprocessingType(Enum):
     NONE = 0
     MIN_MAX_NORMALIZATION = 1
-    NORMALIZATION = 2
-
+    NORMALIZATION=2
 
 class OutputPreprocessingType(Enum):
     NONE = 0
-    NORMALIZATION = 1
+    NORMALIZATION=1
+

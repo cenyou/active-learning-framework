@@ -18,10 +18,13 @@ from alef.oracles.base_oracle import Standard1DOracle
 
 class Sinus(Standard1DOracle):
     def __init__(self, observation_noise=0.01):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        """
         super().__init__(observation_noise, 0.0, 1.0)
 
     def f(self, x):
-        return np.sin(20 * x)
+        return np.squeeze( np.sin(20 * x) )
 
     def query(self, x, noisy=True):
         function_value = self.f(x)

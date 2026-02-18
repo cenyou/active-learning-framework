@@ -12,8 +12,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#!/usr/bin/env python3
-
 import math
 from typing import Optional
 
@@ -52,9 +50,7 @@ class PeriodicKernel(Kernel):
             period_length_constraint = Positive()
 
         ard_num_dims = kwargs.get("ard_num_dims", 1)
-        self.register_parameter(
-            name="raw_period_length", parameter=torch.nn.Parameter(torch.zeros(*self.batch_shape, 1, ard_num_dims))
-        )
+        self.register_parameter(name="raw_period_length", parameter=torch.nn.Parameter(torch.zeros(*self.batch_shape, 1, ard_num_dims)))
 
         if period_length_prior is not None:
             if not isinstance(period_length_prior, Prior):

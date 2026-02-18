@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import math
 import numpy as np
 import tensorflow as tf
 import gpflow
@@ -19,10 +20,10 @@ import gpflow
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
 
-
 class BaseElementaryKernel(gpflow.kernels.Kernel):
+    
     has_fourier_feature = False
-
+    
     def __init__(
         self,
         input_dimension: int,
@@ -41,7 +42,7 @@ class BaseElementaryKernel(gpflow.kernels.Kernel):
             super().__init__(name=name)
             self.num_active_dimensions = input_dimension
         self.kernel = None
-
+    
     def K(self, X, X2=None):
         if X2 is None:
             X2 = X
@@ -58,3 +59,39 @@ class BaseElementaryKernel(gpflow.kernels.Kernel):
 
     def get_input_dimension(self):
         return self.input_dimension
+
+    def reset_parameter(self, variable_name: str, parameter_object: gpflow.base.Parameter):
+        def check_shape_and_type(v, new_par):
+            assert v.shape == new_par.shape
+            assert v.dtype == new_par.dtype
+
+        if variable_name == 'variance':
+            check_shape_and_type(self.kernel.variance, parameter_object)
+            self.kernel.variance = parameter_object
+        elif variable_name == 'lengthscales':
+            check_shape_and_type(self.kernel.lengthscales, parameter_object)
+            self.kernel.lengthscales = parameter_object
+        elif variable_name == 'alpha':
+            check_shape_and_type(self.kernel.alpha, parameter_object)
+            self.kernel.alpha = parameter_object
+        else:
+            raise NotImplementedError
+
+    def reset_parameter_lower_bound(self, variable_name, lower):
+        assert variable_name in ['variance', 'lengthscales', 'alpha'], NotImplementedError
+        raw_par_value = getattr(self.kernel, variable_name)
+        if lower <= 0:
+            self.reset_parameter(
+                variable_name,
+                gpflow.base.Parameter( raw_par_value, transform=gpflow.utilities.positive() )
+            )
+        else:
+            self.reset_parameter(
+                variable_name,
+                gpflow.base.Parameter(
+                    tf.clip_by_value(
+                        raw_par_value, clip_value_min= lower + 1e-4, clip_value_max=math.inf
+                    ),
+                    transform=gpflow.utilities.positive(lower)
+                )
+            )

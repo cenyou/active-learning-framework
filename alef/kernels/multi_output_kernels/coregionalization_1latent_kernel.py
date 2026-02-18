@@ -15,26 +15,25 @@
 import gpflow
 from gpflow.utilities import set_trainable, print_summary
 import tensorflow as tf
+from tensorflow_probability import bijectors
 from tensorflow_probability import distributions as tfd
 import numpy as np
-
-from typing import Tuple, Union, Sequence
-
-from alef.kernels.multi_output_kernels.base_multioutput_flattened_kernel import BaseMultioutputFlattenedKernel
-from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 
 gpflow.config.set_default_float(np.float64)
 gpflow.config.set_default_jitter(1e-4)
 
 f64 = gpflow.utilities.to_default_float
+from typing import Tuple, Union, Sequence, Dict
 
+from alef.kernels.multi_output_kernels.base_multioutput_flattened_kernel import BaseMultioutputFlattenedKernel
+from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
+from alef.utils.utils import tf_delta
 
 class Coregionalization1LKernel(BaseMultioutputFlattenedKernel):
     """
     X: [N, D+1], the last column is task index
     D: input_dimension
     """
-
     def __init__(
         self,
         base_variance: float,
@@ -49,17 +48,14 @@ class Coregionalization1LKernel(BaseMultioutputFlattenedKernel):
         active_on_single_dimension: bool,
         active_dimension: int,
         name: str,
-        **kwargs,
+        *,
+        fix_kernel: bool=False,
+        assign_values: bool=False,
+        parameter_values: Dict={},
+        **kwargs
     ):
-        super().__init__(
-            input_dimension,
-            output_dimension,
-            active_on_single_dimension,
-            active_dimension,
-            name,
-            **kwargs,
-        )
-        if hasattr(base_lengthscale, "__len__"):
+        super().__init__(input_dimension, output_dimension, active_on_single_dimension, active_dimension, name, **kwargs,)
+        if hasattr(base_lengthscale, '__len__'):
             if len(base_lengthscale) == 1:
                 lg = f64(np.repeat(base_lengthscale[0], self.num_active_dimensions))
             else:
@@ -67,22 +63,30 @@ class Coregionalization1LKernel(BaseMultioutputFlattenedKernel):
                 lg = f64(base_lengthscale)
         else:
             lg = f64(np.repeat(base_lengthscale, self.num_active_dimensions))
-
+        
         P = output_dimension
         k_object = self.pick_kernel_object(latent_kernel)
 
-        k = k_object(variance=f64(base_variance), lengthscales=lg, active_dims=tf.range(self.num_active_dimensions))
-
+        k = k_object(
+            variance=f64(base_variance),
+            lengthscales=lg,
+            active_dims=tf.range(self.num_active_dimensions)
+        )
+        
         set_trainable(k.variance, False)
-
-        B = gpflow.kernels.Coregion(output_dim=P, rank=W_rank, active_dims=[self.num_active_dimensions])
-
-        # B.kappa = gpflow.Parameter(B.kappa.numpy(), transform=bijectors.Sigmoid())
-        # B.W = gpflow.Parameter(
+        
+        B = gpflow.kernels.Coregion(
+            output_dim=P,
+            rank=W_rank,
+            active_dims=[self.num_active_dimensions]
+        )
+        
+        #B.kappa = gpflow.Parameter(B.kappa.numpy(), transform=bijectors.Sigmoid())
+        #B.W = gpflow.Parameter(
         #    B.W.numpy(),
         #    transform=bijectors.Sigmoid( low= f64(-4.0), high= f64(4.0) )
-        # )
-
+        #)
+        
         self.kernel = k * B
 
         if add_prior:
@@ -90,37 +94,40 @@ class Coregionalization1LKernel(BaseMultioutputFlattenedKernel):
             loc, std = variance_prior_parameters
 
             k.variance.prior = tfd.TruncatedNormal(
-                loc=f64(loc), scale=f64(std), low=f64(1e-6), high=f64(30), name="kernel_var_prior_TruncatedNormal"
-            )
+                loc = f64(loc), scale = f64(std),
+                low = f64(1e-6), high = f64(30),
+                name='kernel_var_prior_TruncatedNormal')
             k.lengthscales.prior = tfd.Gamma(
                 f64(np.repeat(a_lengthscale, self.num_active_dimensions)),
                 f64(np.repeat(b_lengthscale, self.num_active_dimensions)),
-                name="kernel_len_prior_Gamma",
-            )
+                name='kernel_len_prior_Gamma')
             B.W.prior = tfd.Normal(
-                f64(np.zeros(B.W.shape)), f64(1 / W_rank * np.ones(B.W.shape)), name="kernel_W_prior_Normal"
-            )
-            B.kappa.assign(np.array([1.001e-6] * self.output_dimension))
+                f64(np.zeros(B.W.shape)),
+                f64(1/W_rank*np.ones(B.W.shape)),
+                name='kernel_W_prior_Normal')
+            B.kappa.assign( np.array([1.001e-6]*self.output_dimension) )
             set_trainable(B.kappa, False)
-            # B.kappa.prior = tfd.TruncatedNormal(
+            #B.kappa.prior = tfd.TruncatedNormal(
             #    loc = f64(loc), scale = f64(std),
             #    low = f64(1e-6), high = f64(30),
             #    name='kernel_kappa_prior_TruncatedNormal')
 
+        if assign_values:
+            self.assign_parameters(parameter_values)
+        if fix_kernel:
+            set_trainable(self.kernel, False)
+
     @property
     def num_latent_gps(self):
         return 1
-
     @property
     def latent_kernels(self):
-        return tuple(
-            self.kernel.kernels[0],
-        )
+        return tuple(self.kernel.kernels[0],)
+    
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     k = Coregionalization1LKernel(
-        base_variance=1.0,
+        base_variance = 1.0,
         base_lengthscale=1.0,
         W_rank=2,
         input_dimension=2,
@@ -131,6 +138,7 @@ if __name__ == "__main__":
         latent_kernel=LatentKernel.MATERN52,
         active_on_single_dimension=False,
         active_dimension=None,
-        name="test",
+        name='test'
     )
     print_summary(k)
+

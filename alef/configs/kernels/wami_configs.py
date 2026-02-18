@@ -14,14 +14,16 @@
 
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 
-
 class BasicWamiConfig(BaseKernelConfig):
-    base_A_scale: float = 1.0
-    base_alpha: float = 1.0
-    base_beta: float = 1.0
-    base_rho: float = 1.0
-    base_lengthscale: float = 1.0
-    base_variance: float = 1.0
-    matrix_learnable: bool = True
-    rho_learnable: bool = False
-    name: str = "BasicWami"
+    base_A_scale : float =1.0
+    base_alpha : float = 1.0
+    base_beta : float = 1.0
+    base_rho : float = 1.0
+    base_lengthscale : float = 1.0
+    base_variance : float=1.0
+    matrix_learnable : bool =True
+    rho_learnable : bool =False
+    name : str = "BasicWami"
+
+
+    

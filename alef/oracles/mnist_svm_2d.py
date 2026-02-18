@@ -33,11 +33,9 @@ class MnistSVM2d:
         mnist_data = datasets.load_digits()
         images = mnist_data.images.reshape((len(mnist_data.images), -1))
         labels = mnist_data.target
-        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-            images, labels, test_size=0.2, shuffle=False
-        )
+        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(images, labels, test_size=0.2, shuffle=False)
 
-    def query(self, x: np.array) -> np.float:
+    def query(self, x: np.array) -> float:
         if self.transform:
             gamma = np.exp(10 * x[0])
             C = (x[1] + 1.000001) * 2.0

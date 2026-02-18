@@ -12,10 +12,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import Tuple
+from abc import abstractmethod
+from typing import Tuple, Union, Sequence
 import gpytorch
 import torch
 import math
+from gpytorch.constraints import Positive
 from alef.kernels.pytorch_kernels.elementary_kernels_pytorch import BaseElementaryKernelPytorch
 
 """
@@ -27,12 +29,11 @@ Gaussian Process Kernels for Pattern Discovery and Extrapolation
 
 # gpytorch.kernels.SpectralMixtureKernel does not support priors. So we have to first implement our own.
 
-
 class _CustomizedSpectralMixtureKernel(gpytorch.kernels.SpectralMixtureKernel):
     pass
 
-
 class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
+    
     has_fourier_feature = True
 
     def __init__(
@@ -58,16 +59,17 @@ class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
             # mixture means can be negative, but are the same as if they are positive, so we just focus on positive values
             # see paper eq. 12
             mixture_weights_prior = gpytorch.priors.GammaPrior(a_weight, b_weight)
-            self.kernel = _CustomizedSpectralMixtureKernel(
+            self.kernel = _SpectralMixtureKernelWithPrior(
                 num_mixtures=num_mixtures,
                 ard_num_dims=self.num_active_dimensions,
                 mixture_scales_prior=mixture_scales_prior,
                 mixture_means_prior=mixture_means_prior,
-                mixture_weights_prior=mixture_weights_prior,
+                mixture_weights_prior=mixture_weights_prior
             )
         else:
-            self.kernel = _CustomizedSpectralMixtureKernel(
-                num_mixtures=num_mixtures, ard_num_dims=self.num_active_dimensions
+            self.kernel = _SpectralMixtureKernelWithPrior(
+                num_mixtures=num_mixtures,
+                ard_num_dims=self.num_active_dimensions
             )
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
@@ -79,7 +81,7 @@ class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
     ### the followings are for fourier features
     ### the followings are for fourier features
     ### the followings are for fourier features
-    def _sample_feature_frequencies(self, L: int, num_functions: int = 1):
+    def _sample_feature_frequencies(self, L: int, num_functions: int=1):
         # mixture_weights shape: [Q] or [batch_size, Q]
         # mixture_scales shape: [Q, 1, D] or [batch_size, Q, 1, D]
         # mixture_means shape: [Q, 1, D] or [batch_size, Q, 1, D]
@@ -90,8 +92,10 @@ class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
             kernel_batch_size = torch.Size([1])
         device = mixture_weights.device
         q = torch.multinomial(
-            self.kernel.mixture_weights, num_samples=num_functions * L, replacement=True
-        )  # [num_functions * L, ] or [batch_size, num_functions * L]
+            self.kernel.mixture_weights,
+            num_samples= num_functions * L,
+            replacement=True
+        ) # [num_functions * L, ] or [batch_size, num_functions * L]
         q = q[..., None, None].expand(q.shape + (1, self.num_active_dimensions))
         mixture_scales = torch.gather(self.kernel.mixture_scales, -3, q).reshape(
             kernel_batch_size + (num_functions, L, self.num_active_dimensions)
@@ -99,19 +103,16 @@ class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
         mixture_means = torch.gather(self.kernel.mixture_means, -3, q).reshape(
             kernel_batch_size + (num_functions, L, self.num_active_dimensions)
         )
-        flip = torch.randint(0, 2, size=kernel_batch_size + (num_functions, L), device=device) * 2 - 1
+        flip = torch.randint(0, 2, size = kernel_batch_size + (num_functions, L), device=device) * 2 - 1
         mixture_means = mixture_means * flip.unsqueeze(-1)
 
-        omega = (
-            torch.randn(size=kernel_batch_size + (num_functions, L, self.num_active_dimensions), device=device)
-            * math.sqrt(2)
-            * math.pi
-            * mixture_scales
-            + mixture_means
-        )
+        omega = torch.randn(
+            size=kernel_batch_size + (num_functions, L, self.num_active_dimensions),
+            device = device
+        ) * math.sqrt(2) * math.pi * mixture_scales + mixture_means
         return torch.transpose(omega, -1, -2)
 
-    def _sample_feature_weights(self, L: int, num_functions: int = 1):
+    def _sample_feature_weights(self, L: int, num_functions: int=1):
         # mixture_weights shape: [Q] or [batch_size, Q]
         mixture_weights = self.kernel.mixture_weights
         device = mixture_weights.device
@@ -119,13 +120,12 @@ class SpectralMixtureKernelPytorch(BaseElementaryKernelPytorch):
             kernel_batch_size = mixture_weights.shape[:-1]
         else:
             kernel_batch_size = torch.Size([1])
-        weights = torch.randn(size=kernel_batch_size + (num_functions, L), device=device)  # ~ N(0, 1)
+        weights = torch.randn(size=kernel_batch_size + (num_functions, L), device=device) # ~ N(0, 1)
         return weights
 
 
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
-
     Q = 5
     D = 1
     num_kernels = 2
@@ -139,26 +139,23 @@ if __name__ == "__main__":
     print(kernel.batch_shape)
     kernel.kernel = kernel.kernel.expand_batch((num_kernels,))
     print(kernel.batch_shape)
-    kernel.sample_fourier_features(50 * Q, num_func)
+    kernel.sample_fourier_features(50*Q, num_func)
     f = kernel.bayesian_linear_model()
 
     X = torch.randn([n_data, D])
     Y_rff = f(X).cpu().detach().squeeze() + 0.1 * torch.randn([num_func, n_data])
-    Y_gp = (
-        torch.distributions.MultivariateNormal(
-            torch.zeros(n_data), covariance_matrix=kernel(X).evaluate() + 0.01 * torch.eye(n_data)
-        )
-        .sample([num_func])
-        .cpu()
-        .detach()
-    )
+    Y_gp = torch.distributions.MultivariateNormal(
+        torch.zeros(n_data),
+        covariance_matrix=kernel(X).to_dense() + 0.01 * torch.eye(n_data)
+    ).sample([num_func]).cpu().detach()
     print(X.shape, Y_rff.shape, Y_gp.shape)
     exit()
 
     fig, ax = plt.subplots(1, 2)
     for i in range(num_func):
-        ax[0].plot(X, Y_rff[i], ".")
-        ax[1].plot(X, Y_gp[i], ".")
-    ax[0].set_title("rff")
-    ax[1].set_title("gp")
+        ax[0].plot(X, Y_rff[i], '.')
+        ax[1].plot(X, Y_gp[i], '.')
+    ax[0].set_title('rff')
+    ax[1].set_title('gp')
     plt.show()
+

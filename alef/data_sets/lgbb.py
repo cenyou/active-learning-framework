@@ -31,16 +31,17 @@ class OutputType(Enum):
 class LGBB(BaseDataset):
     def __init__(
         self,
-        base_path,
-        file_name="lgbb_corrected.txt",
-        observation_noise=0.01,
-        normalize_output=True,
+        base_path: str,
+        file_name: str="lgbb_original.txt",
+        observation_noise: float=0.01,
+        normalize_output: bool=True,
     ):
         self.file_path = os.path.join(base_path, file_name)
         self.observation_noise = observation_noise
         self.add_noise = True
         self.exclude_outlier = True
         self.output_type = OutputType.LIFT
+        self.filter_outlier = True
         self.beta = 0.0
         self.normalize_output = normalize_output
         self.name = "LGBB"
@@ -49,7 +50,7 @@ class LGBB(BaseDataset):
         return self.name
 
     def load_data_set(self):
-        df = pd.read_csv(self.file_path, sep=" ")
+        df = pd.read_csv(self.file_path, sep=" ", skiprows=21)
         df_beta_0 = df[df["beta"] == self.beta]
 
         if self.output_type == OutputType.LIFT:
@@ -62,28 +63,43 @@ class LGBB(BaseDataset):
             self.y = np.expand_dims(df_beta_0["roll"].to_numpy(), axis=1)
         elif self.output_type == OutputType.YAW:
             key = "yaw"
-            low = df_beta_0[key].quantile(0.01)
-            high = df_beta_0[key].quantile(0.99)
-            df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
-            x1 = df_filtered["mach"].to_numpy() / 6
-            x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
-            self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            if self.filter_outlier:
+                low = df_beta_0[key].quantile(0.01)
+                high = df_beta_0[key].quantile(0.99)
+                df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
+                x1 = df_filtered["mach"].to_numpy() / 6
+                x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            else:
+                x1 = df_beta_0["mach"].to_numpy() / 6
+                x2 = (df_beta_0["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_beta_0[key].to_numpy(), axis=1)
         elif self.output_type == OutputType.PITCH:
             key = "pitch"
-            low = df_beta_0[key].quantile(0.01)
-            high = df_beta_0[key].quantile(0.99)
-            df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
-            x1 = df_filtered["mach"].to_numpy() / 6
-            x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
-            self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            if self.filter_outlier:
+                low = df_beta_0[key].quantile(0.01)
+                high = df_beta_0[key].quantile(0.99)
+                df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
+                x1 = df_filtered["mach"].to_numpy() / 6
+                x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            else:
+                x1 = df_beta_0["mach"].to_numpy() / 6
+                x2 = (df_beta_0["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_beta_0[key].to_numpy(), axis=1)
         elif self.output_type == OutputType.DRAG:
             key = "drag"
-            low = df_beta_0[key].quantile(0.01)
-            high = df_beta_0[key].quantile(0.99)
-            df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
-            x1 = df_filtered["mach"].to_numpy() / 6
-            x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
-            self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            if self.filter_outlier:
+                low = df_beta_0[key].quantile(0.01)
+                high = df_beta_0[key].quantile(0.99)
+                df_filtered = df_beta_0[(df_beta_0[key] < high) & (df_beta_0[key] > low)]
+                x1 = df_filtered["mach"].to_numpy() / 6
+                x2 = (df_filtered["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_filtered[key].to_numpy(), axis=1)
+            else:
+                x1 = df_beta_0["mach"].to_numpy() / 6
+                x2 = (df_beta_0["alpha"].to_numpy() + 5) / 35
+                self.y = np.expand_dims(df_beta_0[key].to_numpy(), axis=1)
 
         if self.normalize_output:
             mean_y = np.mean(self.y)
@@ -132,9 +148,9 @@ class LGBB(BaseDataset):
             assert len(test_indexes) == n_test
         noise = np.random.randn(self.length, 1) * self.observation_noise
         if self.add_noise:
-            self.y + noise
+            y = self.y + noise
         else:
-            self.y
+            y = self.y
         x_train = self.x[train_indexes]
         y_train = self.y[train_indexes]
         x_test = self.x[test_indexes]
@@ -155,9 +171,7 @@ class LGBB(BaseDataset):
         cats_sample[cat_indexes] = 0.0
         return x_sample, f_sample, y_sample, cats_sample
 
-    def sample_only_one_regime_and_safe(
-        self, n, safety_threshold, left=False, x1_threshold=0.2, safety_is_upper_bound=False
-    ):
+    def sample_only_one_regime_and_safe(self, n, safety_threshold, left=False, x1_threshold=0.2, safety_is_upper_bound=False):
         if left:
             x_filtered = self.x[self.x[:, 0] < x1_threshold]
             y_filtered = self.y[self.x[:, 0] < x1_threshold]

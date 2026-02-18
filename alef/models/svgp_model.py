@@ -14,19 +14,25 @@
 
 import numpy as np
 import tensorflow as tf
-from gpflow.kernels import MultioutputKernel
-from gpflow.inducing_variables import (
-    SharedIndependentInducingVariables,
-    SeparateIndependentInducingVariables,
-    InducingPoints,
-)
+import tensorflow_probability as tfp
+from gpflow.kernels import Kernel, MultioutputKernel
+from gpflow.inducing_variables import SharedIndependentInducingVariables, SeparateIndependentInducingVariables, InducingPoints
 from typing import Tuple, Optional
 from alef.models.base_model import BaseModel
 from gpflow.models import SVGP
 import gpflow
 import time
-from alef.enums.global_model_enums import PredictionQuantity
+from alef.enums.global_model_enums import InitializationType, PredictionQuantity
 
+from enum import Enum
+
+
+"""
+Some pieces of the following class is adapted from GPflow
+(https://github.com/GPflow/GPflow/blob/develop/gpflow/models/svgp.py
+Copyright 2016-2020 The GPflow Contributors, licensed under the Apache License 2.0,
+cf. 3rd-party-licenses.txt file in the root directory of this source tree).
+"""
 
 def iv_array_init(input_dim, M):
     Z_init = np.tile(np.linspace(-1, 1, M)[:, None], (1, input_dim))
@@ -49,8 +55,9 @@ class SVGPModel(BaseModel, SVGP):
         q_sqrt=None,
         whiten: bool = True,
         num_data: int = None,
-        prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y,
+        prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y
     ):
+
         if isinstance(kernel, MultioutputKernel):
             num_latent_gps = kernel.num_latent_gps
 
@@ -62,18 +69,7 @@ class SVGPModel(BaseModel, SVGP):
             iv_list = [InducingPoints(Z) for Z in Zs]
             iv = SeparateIndependentInducingVariables(iv_list)
 
-        super().__init__(
-            kernel,
-            likelihood,
-            iv,
-            mean_function=mean_function,
-            num_latent_gps=num_latent_gps,
-            q_diag=q_diag,
-            q_mu=q_mu,
-            q_sqrt=q_sqrt,
-            whiten=whiten,
-            num_data=num_data,
-        )
+        super().__init__(kernel, likelihood, iv, mean_function=mean_function, num_latent_gps=num_latent_gps, q_diag=q_diag, q_mu=q_mu, q_sqrt=q_sqrt, whiten=whiten, num_data=num_data)
 
         self.prediction_quantity = prediction_quantity
 
@@ -133,7 +129,7 @@ class SVGPModel(BaseModel, SVGP):
         pred_sigmas = np.sqrt(pred_vars)
         return np.squeeze(pred_mus), np.squeeze(pred_sigmas)
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         """
         Method for estimating the model evidence (as we only use bayesian models this should in principle be possible)
 
@@ -144,6 +140,7 @@ class SVGPModel(BaseModel, SVGP):
         Returns:
         evidence value - single value
         """
+        pass
 
     def entropy_predictive_dist(self, x_test: np.array) -> np.array:
         """

@@ -12,7 +12,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from alef.configs.kernels.kernel_list_configs import BasicKernelListConfig
 from alef.configs.kernels.pytorch_kernels.base_kernel_pytorch_config import BaseKernelPytorchConfig
 from alef.configs.kernels.pytorch_kernels.elementary_kernels_pytorch_configs import (
     BasicLinearKernelPytorchConfig,
@@ -51,16 +50,6 @@ class PytorchKernelFactory:
             return Matern52KernelPytorch(**kernel_config.dict())
         elif isinstance(kernel_config, BasicMatern32PytorchConfig):
             return Matern32KernelPytorch(**kernel_config.dict())
-        elif isinstance(kernel_config, BasicKernelListConfig):
-            from alef.models.amortized_infer_structured_kernels.gp.base_kernels import (
-                transform_kernel_list_to_expression,
-            )
-
-            expanded_kernel_list = [kernel_config.kernel_list for i in range(0, kernel_config.input_dimension)]
-            kernel_expression = transform_kernel_list_to_expression(
-                expanded_kernel_list, add_prior=kernel_config.add_prior, use_gpflow=False
-            )
-            return kernel_expression.get_kernel()
         elif isinstance(kernel_config, BasicSpectralMixturePytorchConfig):
             return SpectralMixtureKernelPytorch(**kernel_config.dict())
         elif isinstance(kernel_config, BasicHHKPytorchConfig):

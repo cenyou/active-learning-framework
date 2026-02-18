@@ -17,12 +17,10 @@ from typing import List
 
 import numpy as np
 from alef.bayesian_optimization.base_candidate_generator import CandidateGenerator
-from alef.kernels.kernel_grammar.kernel_grammar_search_spaces import (
-    BaseKernelGrammarSearchSpace,
-    CompositionalKernelSearchSpace,
-)
+from alef.kernels.kernel_grammar.kernel_grammar_search_spaces import BaseKernelGrammarSearchSpace, CompositionalKernelSearchSpace
 
-logger = logging.getLogger(__name__)
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class KernelGrammarCandidateGenerator(CandidateGenerator):
@@ -39,7 +37,7 @@ class KernelGrammarCandidateGenerator(CandidateGenerator):
         walk_length_exploitation_trailing: int,
         do_random_walk_exploitation_trailing: bool,
         limit_n_additional_current_best: bool,
-        **kwargs,
+        **kwargs
     ):
         self.search_space = search_space
         self.n_initial_trailing = n_initial_factor_trailing * self.search_space.get_num_base_kernels()
@@ -115,9 +113,7 @@ class KernelGrammarCandidateGenerator(CandidateGenerator):
         if self.do_random_walk_exploitation_trailing:
             n_walks = int(self.n_exploitation_trailing / self.walk_length_exploitation_trailing)
             for _ in range(0, n_walks):
-                additional_candidates += self.search_space.random_walk(
-                    self.walk_length_exploitation_trailing, best_current_candidate
-                )
+                additional_candidates += self.search_space.random_walk(self.walk_length_exploitation_trailing, best_current_candidate)
         else:
             around_best = self.search_space.get_neighbour_expressions(best_current_candidate)
             if self.limit_n_additional_current_best and len(around_best) > self.n_exploitation_trailing:

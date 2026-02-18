@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Type
 from alef.configs.kernels.deep_kernels.base_deep_kernel_config import BaseDeepKernelConfig
 from alef.configs.models.feature_extractors.base_feature_extractor_config import BaseFeatureExtractorConfig
 from alef.configs.models.feature_extractors.invertible_resnet_config import (

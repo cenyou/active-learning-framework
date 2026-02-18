@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
+from typing import Tuple, Optional
 from abc import ABC, abstractmethod
 import tensorflow as tf
 

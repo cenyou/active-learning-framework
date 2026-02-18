@@ -12,16 +12,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import pickle
 from typing import Dict, List
 
 import numpy as np
+from sklearn import neighbors
 from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression
-from alef.kernels.kernel_grammar.kernel_grammar_search_spaces import BaseKernelGrammarSearchSpace
+from alef.kernels.kernel_grammar.kernel_grammar_search_spaces import BaseKernelGrammarSearchSpace, CKSWithRQSearchSpace
 from sklearn.model_selection import KFold
 from alef.utils.utils import calculate_rmse
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class GrammarNeighbour:
@@ -50,9 +53,7 @@ class KernelGrammarKNNPredictor:
             reverse_neighbour_object = GrammarNeighbour(str(expression))
             for expression_2 in x_complete:
                 self.initialize_in_neighbour_dict(str(expression_2))
-                if self.check_if_expression_in_list(expression_2, expression_neighbours) and not str(
-                    expression_2
-                ) == str(expression):
+                if self.check_if_expression_in_list(expression_2, expression_neighbours) and not str(expression_2) == str(expression):
                     neighbour_object = GrammarNeighbour(str(expression_2))
                     self.neighbours_dict[str(expression)].append(neighbour_object)
                     self.neighbours_dict[str(expression_2)].append(reverse_neighbour_object)
@@ -88,13 +89,7 @@ class KernelGrammarKNNPredictor:
         logger.info("Best k: " + str(best_k))
         return best_k
 
-    def predict(
-        self,
-        x_test: List[BaseKernelGrammarExpression],
-        x_train: List[BaseKernelGrammarExpression],
-        y_train: np.array,
-        k: int,
-    ):
+    def predict(self, x_test: List[BaseKernelGrammarExpression], x_train: List[BaseKernelGrammarExpression], y_train: np.array, k: int):
         assert len(self.neighbours_dict) > 0
         pred_ys = []
         train_dict = self.get_train_dict(x_train, y_train)

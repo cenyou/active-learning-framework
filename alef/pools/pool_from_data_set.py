@@ -12,40 +12,42 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import Union, List
+from typing import Union, Sequence, List
+import numpy as np
 from alef.pools.pool_from_data import PoolFromData
 from alef.data_sets.base_data_set import StandardDataSet
-
 
 class PoolFromDataSet(PoolFromData):
     def __init__(
         self,
         dataset: StandardDataSet,
         input_idx: List[Union[int, bool]],
-        output_idx: List[Union[int, bool]] = [0],
-        # observation_noise: float = None,
-        # seed:int=123,
-        # set_seed:bool=False
+        output_idx: List[Union[int, bool]]=[0],
+        data_is_noisy: bool=True,
+        observation_noise: float = None,
+        seed:int=123,
+        set_seed:bool=False
     ):
         x, y = dataset.get_complete_dataset()
         super().__init__(
-            x[..., input_idx],
-            y[..., output_idx],
-            data_is_noisy=True,
-            # observation_noise=observation_noise,
-            # seed=seed,
-            # set_seed=set_seed
+            x[..., input_idx], y[..., output_idx],
+            data_is_noisy=data_is_noisy,
+            observation_noise=observation_noise,
+            seed=seed,
+            set_seed=set_seed
         )
+        
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
+    import pandas as pd
+    import os
     from alef.data_sets.pytest_set import PytestSet
-
+    
     dataset = PytestSet()
     dataset.load_data_set()
 
-    pool = PoolFromDataSet(dataset, [0, 1, 2], [0])
-
+    pool = PoolFromDataSet(dataset, [0,1,2], [0])
+    
     xx, yy = pool.get_full_data()
     print(xx.shape)
     print(yy.shape)

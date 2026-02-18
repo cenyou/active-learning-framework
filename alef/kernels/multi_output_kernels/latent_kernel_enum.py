@@ -20,3 +20,4 @@ class LatentKernel(Enum):
     MATERN12 = 1
     MATERN32 = 2
     MATERN52 = 3
+

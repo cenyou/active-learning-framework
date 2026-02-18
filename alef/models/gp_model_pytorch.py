@@ -19,6 +19,9 @@ import torch
 from alef.models.base_model import BaseModel
 import numpy as np
 import gpytorch
+from enum import Enum
+from gpytorch.kernels.rbf_kernel import RBFKernel
+from gpytorch.kernels.scale_kernel import ScaleKernel
 from alef.enums.global_model_enums import PredictionQuantity
 from alef.utils.utils import get_gpytorch_exponential_prior
 from scipy.stats import norm
@@ -110,7 +113,7 @@ class GPModelPytorch(BaseModel):
                         loss = self.ml_type2(x_data, y_data).item()
                         loss_list.append(loss)
                         state_dict_list.append(copy.deepcopy(self.model.state_dict()))
-                        print(f"Loss at iteration {i + 1}/{self.n_restarts_multistart}: {loss}")
+                        print(f"Loss at iteration {i+1}/{self.n_restarts_multistart}: {loss}")
                         print("Parameters of run:")
                         self.print_model_parameters()
                     except KeyboardInterrupt:
@@ -120,7 +123,7 @@ class GPModelPytorch(BaseModel):
                 assert len(loss_list) == len(state_dict_list)
                 loss_array = np.array(loss_list)
                 best_index = np.argmin(loss_array)
-                print(f"Best run: {best_index + 1}")
+                print(f"Best run: {best_index+1}")
                 print(f"Loss function best: {loss_array[best_index]}")
                 best_state_dict = state_dict_list[best_index]
                 self.model.load_state_dict(best_state_dict)
@@ -182,10 +185,10 @@ class GPModelPytorch(BaseModel):
             optimizer.step()
             if i > self.min_iter_early_stopping and self.do_early_stopping:
                 current_loss = loss.item()
-                if np.allclose(current_loss, previous_loss, rtol=1e-5, atol=1e-5):  # noqa: F821
+                if np.allclose(current_loss, previous_loss, rtol=1e-5, atol=1e-5):
                     print(f"Stopping criteria triggered at iteration {i}")
                     break
-            previous_loss = loss.item()  # noqa: F841
+            previous_loss = loss.item()
         # return final loss
         loss = self.loss_function(x_data, y_data, mll)
         return loss
@@ -232,7 +235,7 @@ class GPModelPytorch(BaseModel):
     def reset_model(self):
         pass
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         raise NotImplementedError
 
     def predictive_log_likelihood(self, x_test: np.array, y_test: np.array) -> np.array:

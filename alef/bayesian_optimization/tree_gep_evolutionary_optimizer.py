@@ -12,23 +12,20 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import numpy as np
 import random
 import time
-from alef.kernels.kernel_grammar.kernel_grammar import (
-    BaseKernelGrammarExpression,
-    ElementaryKernelGrammarExpression,
-    KernelGrammarExpression,
-)
+from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, ElementaryKernelGrammarExpression, KernelGrammarExpression
 from alef.kernels.kernel_grammar.kernel_grammar_candidate_generator import KernelGrammarCandidateGenerator
 from alef.oracles.base_object_oracle import BaseObjectOracle
 import logging
-import numpy as np
+from alef.utils.custom_logging import getLogger
 from alef.oracles.gp_model_bic_oracle import GPModelBICOracle
 from alef.oracles.gp_model_cv_oracle import GPModelCVOracle
 
 from alef.oracles.gp_model_evidence_oracle import GPModelEvidenceOracle
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class TreeGEPEvoluationaryOptimizer:
@@ -37,15 +34,7 @@ class TreeGEPEvoluationaryOptimizer:
     programming for Gaussian process regression"
     """
 
-    def __init__(
-        self,
-        population_size: int,
-        reproduction_rate: float,
-        tournament_fraction: float,
-        mutation_max_n: int,
-        max_depth: int,
-        **kwargs,
-    ):
+    def __init__(self, population_size: int, reproduction_rate: float, tournament_fraction: float, mutation_max_n: int, max_depth: int, **kwargs):
         self.population_size = population_size
         self.reproduction_rate = reproduction_rate
         self.tournament_fraction = tournament_fraction
@@ -61,33 +50,18 @@ class TreeGEPEvoluationaryOptimizer:
         self.test_set_metrics = []
 
     def set_candidate_generator(self, candidate_generator: KernelGrammarCandidateGenerator):
-        """
-        Set the candidate generator.
-        """
         self.candidate_generator = candidate_generator
 
     def set_oracle(self, oracle: BaseObjectOracle):
-        """
-        Set the oracle.
-        """
         self.oracle = oracle
 
     def get_current_best(self):
-        """
-        Get the current best candidate.
-        """
         return self.x_data[np.argmax(self.y_data)]
 
     def get_current_best_value(self):
-        """
-        Get the current best value.
-        """
         return np.max(self.y_data)
 
     def sample_initial_dataset(self, n_data, seed=100, set_seed=False):
-        """
-        Sample the initial dataset.
-        """
         self.x_data = self.candidate_generator.get_random_canditates(n_data, seed, set_seed)
         y_list = []
         logger.info("Sample initial data set")
@@ -99,9 +73,6 @@ class TreeGEPEvoluationaryOptimizer:
         self.y_data = np.expand_dims(np.array(y_list), axis=1)
 
     def maximize(self, rounds: int):
-        """
-        Maximize the objective function.
-        """
         self.validation_metrics.append(self.get_current_best_value())
         self.current_bests.append((self.get_current_best(), self.get_current_best_value()))
         self.iteration_index = 0
@@ -122,19 +93,9 @@ class TreeGEPEvoluationaryOptimizer:
                 time_stamp_iteration = time.perf_counter()
             assert len(population) == self.population_size
             population = self.set_dynamical_depth(population, max_value)
-        return (
-            np.array(self.validation_metrics),
-            self.query_list,
-            self.current_bests,
-            self.test_set_metrics,
-            self.iteration_time_list,
-            self.oracle_time_list,
-        )
+        return np.array(self.validation_metrics), self.query_list, self.current_bests, self.test_set_metrics, self.iteration_time_list, self.oracle_time_list
 
     def set_dynamical_depth(self, population, max_value):
-        """
-        Set the dynamical depth of the population.
-        """
         new_population = []
         for individual in population:
             expression, y_value = individual
@@ -151,9 +112,6 @@ class TreeGEPEvoluationaryOptimizer:
         return new_population
 
     def get_initial_population(self):
-        """
-        Get the initial population.
-        """
         time_stamp_iteration = time.perf_counter()
         assert len(self.x_data) <= self.population_size
         population = [(self.x_data[i], self.y_data[i]) for i in range(0, len(self.x_data))]
@@ -170,9 +128,6 @@ class TreeGEPEvoluationaryOptimizer:
         return population
 
     def query(self, new_candidate):
-        """
-        Query the oracle with a new candidate.
-        """
         logger.info("Query: " + str(new_candidate))
         time_before_oracle = time.perf_counter()
         y_new_candidate, _ = self.oracle.query(new_candidate)
@@ -189,9 +144,6 @@ class TreeGEPEvoluationaryOptimizer:
         return y_new_candidate
 
     def select(self, population):
-        """
-        Select candidates from the population using tournament selection.
-        """
         ### Tournament selection
         selected = []
         for i in range(0, self.population_size):
@@ -201,9 +153,6 @@ class TreeGEPEvoluationaryOptimizer:
         return selected
 
     def reproduce(self, selected):
-        """
-        Reproduce new candidates from the selected candidates.
-        """
         num_survivors = int(self.reproduction_rate * self.population_size)
         num_offspring = self.population_size - num_survivors
         survivors = random.sample(selected, num_survivors)
@@ -227,9 +176,6 @@ class TreeGEPEvoluationaryOptimizer:
         return offspring, survivors
 
     def mutate(self, candidate: BaseKernelGrammarExpression):
-        """
-        Mutate a candidate.
-        """
         assert isinstance(self.candidate_generator, KernelGrammarCandidateGenerator)
         length_mutation = np.random.choice(np.arange(1, self.mutation_max_n))
         new_subtree = self.candidate_generator.get_random_candidate_n_operations(length_mutation)
@@ -245,9 +191,6 @@ class TreeGEPEvoluationaryOptimizer:
                 return new_candidate
 
     def cross_over(self, candidate1: BaseKernelGrammarExpression, candidate2: BaseKernelGrammarExpression):
-        """
-        Perform crossover between two candidates.
-        """
         cand1_copy = candidate1.deep_copy()
         cand2_copy = candidate2.deep_copy()
         assert isinstance(cand1_copy, BaseKernelGrammarExpression)
@@ -269,14 +212,7 @@ class TreeGEPEvoluationaryOptimizer:
         return offspring1, offspring2
 
     def add_test_set_metrics(self, index):
-        """
-        Add test set metrics.
-        """
         if index % self.test_set_metrics_index_interval == 0:
-            if (
-                isinstance(self.oracle, GPModelBICOracle)
-                or isinstance(self.oracle, GPModelEvidenceOracle)
-                or isinstance(self.oracle, GPModelCVOracle)
-            ):
+            if isinstance(self.oracle, GPModelBICOracle) or isinstance(self.oracle, GPModelEvidenceOracle) or isinstance(self.oracle, GPModelCVOracle):
                 test_set_metric_tuple = self.oracle.query_on_test_set(self.get_current_best())
                 self.test_set_metrics.append((index, *test_set_metric_tuple))

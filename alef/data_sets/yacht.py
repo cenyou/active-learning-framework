@@ -12,9 +12,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from pandas.plotting import scatter_matrix
+import matplotlib.pyplot as plt
+from enum import Enum
 
-from alef.utils.plot_utils import active_learning_nd_plot
+from alef.utils.plot_utils import active_learning_1d_plot, active_learning_2d_plot, active_learning_nd_plot
 from alef.enums.data_sets_enums import InputPreprocessingType, OutputPreprocessingType
 from alef.utils.utils import normalize_data, min_max_normalize_data
 from alef.data_sets.base_data_set import StandardDataSet
@@ -22,7 +27,7 @@ import os
 
 
 class Yacht(StandardDataSet):
-    def __init__(self, base_path, file_name="yacht_hydrodynamics.data"):
+    def __init__(self, base_path: str, file_name: str="yacht_hydrodynamics.data"):
         super().__init__()
         self.file_path = os.path.join(base_path, file_name)
         self.input_preprocessing_type = InputPreprocessingType.MIN_MAX_NORMALIZATION

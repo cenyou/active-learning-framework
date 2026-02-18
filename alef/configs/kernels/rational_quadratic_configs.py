@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Tuple
+from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.configs.kernels.base_elementary_kernel_config import BaseElementaryKernelConfig
 from alef.configs.base_parameters import (
     BASE_KERNEL_VARIANCE,

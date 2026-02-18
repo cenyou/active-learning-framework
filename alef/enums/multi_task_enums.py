@@ -18,3 +18,4 @@ from enum import Enum
 class TransferLearningTaskMode(Enum):
     SOURCE = 0
     TARGET = 1
+

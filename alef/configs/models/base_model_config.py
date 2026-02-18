@@ -14,6 +14,6 @@
 
 from pydantic import BaseSettings
 
-
 class BaseModelConfig(BaseSettings):
-    name: str
+    name : str
+

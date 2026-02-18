@@ -13,40 +13,56 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pandas.plotting import scatter_matrix
+import matplotlib.pyplot as plt
+from enum import Enum
 
+from alef.utils.plot_utils import active_learning_1d_plot, active_learning_2d_plot, active_learning_nd_plot
+from alef.enums.data_sets_enums import InputPreprocessingType, OutputPreprocessingType
+from alef.utils.utils import normalize_data, min_max_normalize_data
 from alef.data_sets.base_data_set import StandardDataSet
 import os
 
 
 class Engine1(StandardDataSet):
-    def __init__(self, base_path):
+    def __init__(self, base_path: str):
         super().__init__()
-        self.file_path = os.path.join(base_path, "engine1_normalized.xlsx")
-        self.safety_path = os.path.join(base_path, "safety_constraint.xlsx")
+        self.file_path = os.path.join(base_path, 'engine1_normalized.xlsx')
+        self.safety_path = os.path.join(base_path, 'safety_constraint.xlsx')
         self.constrain_input = True
-        # self.input_preprocessing_type = InputPreprocessingType.MIN_MAX_NORMALIZATION
-        # self.output_preprocessing_type = OutputPreprocessingType.NORMALIZATION
+        self.input_preprocessing_type = InputPreprocessingType.NONE
+        #self.output_preprocessing_type = OutputPreprocessingType.NONE
         self.name = "Engine1"
 
     def load_data_set(self):
-        data = pd.read_excel(self.file_path, sheet_name="data", header=[0, 1], index_col=[0])
-        x_cols = ["nmot_w", "RL_Mess", "wnwe_cal", "LambBr"]
-        y_cols = ["be", "T_Ex", "T_C1_1_3", "PI0v", "PI0s", "HC", "NOx"]
-
+        data = pd.read_excel(self.file_path, sheet_name = 'data', header=[0, 1], index_col=[0])
+        x_cols = ['nmot_w', 'RL_Mess', 'wnwe_cal', 'LambBr']
+        y_cols = ['be', 'T_Ex', 'T_C1_1_3', 'PI0v', 'PI0s', 'HC', 'NOx']
+        
         X_table = data[x_cols]
         Y_table = data[y_cols]
 
         if self.constrain_input:
-            safety_df = pd.read_excel(self.safety_path, sheet_name="engine1_normalized", header=[0, 1], index_col=0)
-            mask = (X_table >= safety_df.loc["lower_bound", x_cols]) & (X_table <= safety_df.loc["upper_bound", x_cols])
+            safety_df = pd.read_excel(self.safety_path, sheet_name = 'engine1_normalized', header=[0,1], index_col=0)
+            mask = (X_table >= safety_df.loc['lower_bound', x_cols]) & (X_table <= safety_df.loc['upper_bound', x_cols])
             mask = mask.all(axis=1).to_numpy().reshape(-1)
-            self.x = X_table[mask].to_numpy()
+            x = X_table[mask].to_numpy()
             self.y = Y_table[mask].to_numpy()
             self.data_index = data.index[mask].to_numpy()
         else:
-            self.x = X_table.to_numpy()
+            x = X_table.to_numpy()
             self.y = Y_table.to_numpy()
             self.data_index = data.index.to_numpy()
+
+        if self.input_preprocessing_type == InputPreprocessingType.MIN_MAX_NORMALIZATION:
+            self.x = min_max_normalize_data(x)
+        elif self.input_preprocessing_type == InputPreprocessingType.NORMALIZATION:
+            self.x = normalize_data(x)
+        else:
+            self.x = x
+
         self.input_names = x_cols
         self.output_names = y_cols
         self.length = self.x.shape[0]
@@ -55,34 +71,42 @@ class Engine1(StandardDataSet):
 
 
 class Engine2(StandardDataSet):
-    def __init__(self, base_path="U:\\Projects\\experiments\\data\\engine"):
+    def __init__(self, base_path: str):
         super().__init__()
-        self.file_path = os.path.join(base_path, "engine2_normalized.xlsx")
-        self.safety_path = os.path.join(base_path, "safety_constraint.xlsx")
+        self.file_path = os.path.join(base_path, 'engine2_normalized.xlsx')
+        self.safety_path = os.path.join(base_path, 'safety_constraint.xlsx')
         self.constrain_input = True
-        # self.input_preprocessing_type = InputPreprocessingType.MIN_MAX_NORMALIZATION
-        # self.output_preprocessing_type = OutputPreprocessingType.NORMALIZATION
+        self.input_preprocessing_type = InputPreprocessingType.NONE
+        #self.output_preprocessing_type = OutputPreprocessingType.NONE
         self.name = "Engine2"
 
     def load_data_set(self):
-        data = pd.read_excel(self.file_path, sheet_name="data", header=[0, 1], index_col=[0])
-        x_cols = ["nmot_w", "RL_Mess", "wnwe_cal", "LambBr"]
-        y_cols = ["be", "T_Ex", "T_C1_1_3", "PI0v", "PI0s", "HC", "NOx"]
-
+        data = pd.read_excel(self.file_path, sheet_name = 'data', header=[0, 1], index_col=[0])
+        x_cols = ['nmot_w', 'RL_Mess', 'wnwe_cal', 'LambBr']
+        y_cols = ['be', 'T_Ex', 'T_C1_1_3', 'PI0v', 'PI0s', 'HC', 'NOx']
+        
         X_table = data[x_cols]
         Y_table = data[y_cols]
 
         if self.constrain_input:
-            safety_df = pd.read_excel(self.safety_path, sheet_name="engine1_normalized", header=[0, 1], index_col=0)
-            mask = (X_table >= safety_df.loc["lower_bound", x_cols]) & (X_table <= safety_df.loc["upper_bound", x_cols])
+            safety_df = pd.read_excel(self.safety_path, sheet_name = 'engine1_normalized', header=[0,1], index_col=0)
+            mask = (X_table >= safety_df.loc['lower_bound', x_cols]) & (X_table <= safety_df.loc['upper_bound', x_cols])
             mask = mask.all(axis=1).to_numpy().reshape(-1)
-            self.x = X_table[mask].to_numpy()
+            x = X_table[mask].to_numpy()
             self.y = Y_table[mask].to_numpy()
             self.data_index = data.index[mask].to_numpy()
         else:
-            self.x = X_table.to_numpy()
+            x = X_table.to_numpy()
             self.y = Y_table.to_numpy()
             self.data_index = data.index.to_numpy()
+
+        if self.input_preprocessing_type == InputPreprocessingType.MIN_MAX_NORMALIZATION:
+            self.x = min_max_normalize_data(x)
+        elif self.input_preprocessing_type == InputPreprocessingType.NORMALIZATION:
+            self.x = normalize_data(x)
+        else:
+            self.x = x
+
         self.input_names = x_cols
         self.output_names = y_cols
         self.length = self.x.shape[0]

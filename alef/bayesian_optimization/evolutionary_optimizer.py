@@ -26,9 +26,6 @@ class EvolutionaryOptimizer:
         self.mutuation_strength_dicount = 0.8
 
     def maximize(self, func, dimension, bounds_a, bounds_b, steps):
-        """
-        Maximize the objective function.
-        """
         print("EA - Start optimization")
         self.bounds_a = bounds_a
         self.bounds_b = bounds_b
@@ -37,7 +34,7 @@ class EvolutionaryOptimizer:
         for step in range(0, steps):
             print("Step " + str(step + 1) + "/" + str(steps))
             if step > 0:
-                survivors = self.select(population, function_values)  # noqa: F821
+                survivors = self.select(population, function_values)
                 population = self.reproduce(survivors)
             function_values = func(population)
             fittest_index = np.argmax(function_values)
@@ -51,9 +48,6 @@ class EvolutionaryOptimizer:
         return self.current_maximizer, self.current_maximizer_value
 
     def select(self, population, function_values):
-        """
-        Select the best candidates from the population.
-        """
         sorted_indexes = np.argsort(function_values)
         sorted_population = population[sorted_indexes]
         num_survive = int(self.population_size * self.survival_rate)
@@ -62,9 +56,6 @@ class EvolutionaryOptimizer:
         return survivors
 
     def reproduce(self, survivors):
-        """
-        Reproduce new candidates from the survivors.
-        """
         new_generation = []
         for survivor in survivors:
             for j in range(0, self.num_offspring):
@@ -73,12 +64,15 @@ class EvolutionaryOptimizer:
         return np.array(new_generation)
 
     def mutate(self, survivor):
-        """
-        Mutate a survivor to create a new candidate.
-        """
         bounds_diff = self.bounds_b - self.bounds_a
         delta = 0.5 * self.mutuation_strength * bounds_diff
         child_a = np.max(np.stack((survivor - delta, self.bounds_a)), axis=0)
         child_b = np.min(np.stack((survivor + delta, self.bounds_b)), axis=0)
         child = np.random.uniform(child_a, child_b)
         return child
+
+
+if __name__ == "__main__":
+    func = lambda x: -1 * np.sum(np.power(x, 2.0) + x, axis=1) + 5
+    ev_opt = EvolutionaryOptimizer(100)
+    print(ev_opt.maximize(func, 2, np.array([-5, -5]), np.array([10, 5]), 20))

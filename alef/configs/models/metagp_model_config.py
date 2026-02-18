@@ -12,26 +12,30 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Dict, Tuple, Optional
+from alef.configs.base_parameters import INPUT_DOMAIN
 from alef.configs.models.base_model_config import BaseModelConfig
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.enums.global_model_enums import PredictionQuantity
-
+from alef.models.mogp_model_transfer import SourceTraining
 
 class BasicMetaGPModelConfig(BaseModelConfig):
     zero_mean: bool = False
     kernel_config: BaseKernelConfig
-    observation_noise: float = 0.1
+    observation_noise : float = 0.1
     min_calib_freq: float = 0.95
-    weight_decay: float = 1e-4
+    weight_decay : float = 1e-4
     num_iter_fit: int = 5000
-    predict_outputscale: bool = True
-    train_data_in_kl: bool = True
-    optimize_hps: bool = True
+    predict_outputscale: bool= True
+    train_data_in_kl: bool= True
+    optimize_hps : bool = True
     prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y
-    name: str = "BasicMetaGP"
-    perform_multi_start_optimization: bool = True
-    train_likelihood_variance: bool = True
+    perform_multi_start_optimization : bool=True
+    n_starts_for_multistart_opt : int=5
+    train_likelihood_variance : bool=True
+    input_domain : Tuple[float, float]=INPUT_DOMAIN
+    load_model: Dict={}
+    name : str = "BasicMetaGP"
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     pass

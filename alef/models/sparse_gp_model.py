@@ -17,8 +17,9 @@ from alef.kernels.input_initialized_kernel_interface import InputInitializedKern
 from alef.models.gp_model import GPModel, PredictionQuantity
 import gpflow
 import numpy as np
+from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.utils.utils import k_means
-from gpflow.utilities import set_trainable
+from gpflow.utilities import print_summary, set_trainable
 from tensorflow_probability import distributions as tfd
 
 
@@ -41,7 +42,7 @@ class SparseGpModel(GPModel):
         n_starts_for_multistart_opt: int,
         expected_observation_noise: float,
         prediction_quantity: PredictionQuantity,
-        **kwargs,
+        **kwargs
     ):
         super().__init__(
             kernel,
@@ -59,11 +60,11 @@ class SparseGpModel(GPModel):
             n_starts_for_multistart_opt=n_starts_for_multistart_opt,
             expected_observation_noise=expected_observation_noise,
             prediction_quantity=prediction_quantity,
-            **kwargs,
+            **kwargs
         )
         self.n_inducing_points = n_inducing_points
 
-    def build_model(self, x_data: np.array, y_data: np.array):
+    def build_model(self, x_data: np.array, y_data: np.array, *args, **kwargs):
         if isinstance(self.kernel, InputInitializedKernelInterface):
             self.kernel.initialize_parameters(x_data, y_data)
             self.kernel_initial_parameter_cache.clear()

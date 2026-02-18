@@ -12,12 +12,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from enum import Enum
 from typing import Union
 import numpy as np
-from alef.acquisition_function.al_acquisition_functions.acq_random import Random
-from alef.acquisition_function.bo_acquisition_functions.base_bo_acquisition_function import BaseBOAcquisitionFunction
+from scipy.stats import norm
+from alef.acquisition_functions.al_acquisition_functions.acq_random import Random
+from alef.acquisition_functions.bo_acquisition_functions.base_bo_acquisition_function import BaseBOAcquisitionFunction
+from alef.models.bayesian_ensemble_interface import BayesianEnsembleInterface
 from alef.utils.metric_curve_plotter import MetricCurvePlotter
 from alef.utils.plot_utils import (
+    active_learning_1d_plot,
     active_learning_1d_plot_with_acquisition,
     active_learning_2d_plot,
     active_learning_2d_plot_without_gt,
@@ -30,6 +34,7 @@ from alef.bayesian_optimization.evolutionary_optimizer import EvolutionaryOptimi
 
 
 class BayesianOptimizer:
+
     """
     Main class for bayesian optimization
 
@@ -49,11 +54,12 @@ class BayesianOptimizer:
         do_plotting: bool,
         random_shooting_n: int,
         steps_evoluationary: int,
-        **kwargs,
+        **kwargs
     ):
-        self.validation_type = validation_type
         self.acquisition_function = acquisition_function
+        assert isinstance(self.acquisition_function, (BaseBOAcquisitionFunction, Random) )
         self.acquisiton_optimization_type = acquisiton_optimization_type
+        self.validation_type = validation_type
         self.validation_metrics = []
         self.ground_truth_available = False
         self.do_plotting = do_plotting
@@ -62,9 +68,7 @@ class BayesianOptimizer:
         self.steps_evoluationary = steps_evoluationary
         self.save_plots = False
         self.plot_path = None
-        assert isinstance(self.acquisition_function, BaseBOAcquisitionFunction) or isinstance(
-            self.acquisition_function, Random
-        )
+        assert isinstance(self.acquisition_function, BaseBOAcquisitionFunction) or isinstance(self.acquisition_function, Random)
 
     def set_oracle(self, oracle: BaseOracle):
         """
@@ -125,7 +129,7 @@ class BayesianOptimizer:
         """
         self.max_f = value
 
-    def sample_train_set(self, n_data: int, seed: int = 100, set_seed: bool = False):
+    def sample_train_set(self, n_data, seed=100, set_seed=False):
         """
         Method for sampling the initial dataset directly from the oracle object
 
@@ -138,7 +142,7 @@ class BayesianOptimizer:
             np.random.seed(seed)
         self.x_data, self.y_data = self.oracle.get_random_data(n_data, noisy=True)
 
-    def set_train_set(self, x_train: np.ndarray, y_train: np.ndarray):
+    def set_train_set(self, x_train, y_train):
         """
         Method for setting the train set manually
         Arguments:
@@ -171,11 +175,7 @@ class BayesianOptimizer:
         if self.acquisiton_optimization_type == AcquisitionOptimizationType.EVOLUTIONARY:
             optimizer = EvolutionaryOptimizer(int(self.random_shooting_n / self.steps_evoluationary))
             new_query, _ = optimizer.maximize(
-                self.acquisition_func,
-                dimensions,
-                np.repeat(box_a, dimensions),
-                np.repeat(box_b, dimensions),
-                self.steps_evoluationary,
+                self.acquisition_func, dimensions, np.repeat(box_a, dimensions), np.repeat(box_b, dimensions), self.steps_evoluationary
             )
             return new_query
 
@@ -203,7 +203,7 @@ class BayesianOptimizer:
         self.validate()
         for i in range(0, self.n_steps):
             query = self.update()
-            print("Query")
+            print(f"Iter {i}: Query")
             print(query)
             new_y = self.oracle.query(query)
             if self.do_plotting:
@@ -310,15 +310,11 @@ class BayesianOptimizer:
         else:
             print("Dimension to high for plotting")
         plot_name = "model_specific" + str(step) + ".png"
-        plot_model_specifics(
-            x_grid, self.x_data, self.model, save_plot=self.save_plots, file_name=plot_name, file_path=self.plot_path
-        )
+        plot_model_specifics(x_grid, self.x_data, self.model, save_plot=self.save_plots, file_name=plot_name, file_path=self.plot_path)
 
     def plot_validation_curve(self):
         metric_curve_plotter = MetricCurvePlotter(1)
-        metric_curve_plotter.add_metrics_curve(
-            np.arange(0, len(self.validation_metrics)), self.validation_metrics, "blue", "x", 0, False
-        )
+        metric_curve_plotter.add_metrics_curve(np.arange(0, len(self.validation_metrics)), self.validation_metrics, "blue", "x", 0, False)
         metric_curve_plotter.show()
 
 

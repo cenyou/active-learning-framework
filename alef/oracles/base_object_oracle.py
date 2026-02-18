@@ -17,14 +17,14 @@ import numpy as np
 
 
 class BaseObjectOracle:
-    def query(self, x: object) -> Tuple[np.float, np.float]:
+    def query(self, x: object) -> Tuple[float, float]:
         """
         Queries the oracle at input object x and gets back the oracle value
 
         Arguments:
             x : object - General oracle -> input can be any object (not restricted to numbers/arrays)
         Returns:
-            np.float - value of oracle at location x
-            np.float - time duration of query call in seconds
+            float - value of oracle at location x
+            float - time duration of query call in seconds
         """
         raise NotImplementedError

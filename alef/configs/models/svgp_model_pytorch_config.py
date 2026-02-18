@@ -15,6 +15,8 @@
 from alef.configs.models.base_model_config import BaseModelConfig
 from alef.enums.global_model_enums import PredictionQuantity
 from alef.configs.kernels.pytorch_kernels.base_kernel_pytorch_config import BaseKernelPytorchConfig
+import numpy as np
+from alef.configs.prior_parameters import EXPECTED_OBSERVATION_NOISE, NOISE_VARIANCE_EXPONENTIAL_LAMBDA
 
 
 class BasicSVGPModelPytorchConfig(BaseModelConfig):

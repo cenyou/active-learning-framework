@@ -12,24 +12,27 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from gpflow.base import Transform
 from gpflow.config.__config__ import default_float
 from gpflow.utilities.bijectors import positive
+from tensorflow.python.ops.gen_math_ops import exp
+from alef.configs import kernels
+from alef.configs.kernels.kernel_grammar_generators.cks_with_rq_generator_config import CKSWithRQGeneratorConfig
 from alef.configs.kernels.linear_configs import LinearWithPriorConfig
+from alef.configs.kernels.matern52_configs import Matern52WithPriorConfig
 from alef.configs.kernels.rbf_configs import RBFWithPriorConfig
 from alef.kernels.base_object_kernel import BaseObjectKernel
+from alef.configs.kernels.hhk_configs import HHKEightLocalDefaultConfig, HHKFourLocalDefaultConfig, HHKTwoLocalDefaultConfig
 import tensorflow as tf
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import gpflow
 import numpy as np
 import logging
-from alef.kernels.kernel_grammar.kernel_grammar import (
-    BaseKernelGrammarExpression,
-    ElementaryKernelGrammarExpression,
-    KernelGrammarExpression,
-    KernelGrammarOperator,
-)
+from alef.utils.custom_logging import getLogger
+from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, ElementaryKernelGrammarExpression, KernelGrammarExpression, KernelGrammarOperator
 from alef.kernels.linear_kernel import LinearKernel
 from alef.kernels.rbf_kernel import RBFKernel
+from alef.utils.utils import k_means
 from tensorflow_probability import distributions as tfd
 
 
@@ -38,7 +41,7 @@ gpflow.config.set_default_jitter(1e-4)
 
 f64 = gpflow.utilities.to_default_float
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class EvaluatedKernelWrapper:
@@ -77,7 +80,7 @@ class ExpectedHellingerDistanceCache:
     def __init__(self) -> None:
         self.cache_dict = {}
 
-    def add_to_cache(self, kernel_identifier_k1: str, kernel_identifier_k2: str, expected_hellinger_distance: np.float):
+    def add_to_cache(self, kernel_identifier_k1: str, kernel_identifier_k2: str, expected_hellinger_distance: float):
         if not kernel_identifier_k1 in self.cache_dict:
             self.cache_dict[kernel_identifier_k1] = {}
         if not kernel_identifier_k2 in self.cache_dict:
@@ -106,7 +109,7 @@ class KernelKernelHellinger(BaseObjectKernel):
         use_hyperprior: bool,
         lengthscale_prior_parameters: Tuple[float, float],
         variance_prior_parameters: Tuple[float, float],
-        **kwargs,
+        **kwargs
     ):
         self.lengthscale = gpflow.Parameter(f64(base_lengthscale), transform=positive())
         self.variance = gpflow.Parameter(f64(base_variance), transform=positive())
@@ -126,9 +129,7 @@ class KernelKernelHellinger(BaseObjectKernel):
         self.jitter = 1e-6
 
     def K(self, X: List[EvaluatedKernelWrapper], X2: Optional[List[EvaluatedKernelWrapper]] = None) -> tf.Tensor:
-        hellinger_distances = self.get_hellinger_distance_matrix(
-            X, X2
-        )  # contains only numpy calculation to not slow down computations under tf.GradientTape
+        hellinger_distances = self.get_hellinger_distance_matrix(X, X2)  # contains only numpy calculation to not slow down computations under tf.GradientTape
         K = self.variance * tf.math.exp(-0.5 * (hellinger_distances / tf.pow(self.lengthscale, 2.0)))
         return K
 
@@ -136,9 +137,7 @@ class KernelKernelHellinger(BaseObjectKernel):
         diag = self.variance * tf.ones(len(X), dtype=default_float())
         return diag
 
-    def get_hellinger_distance_matrix(
-        self, X: List[EvaluatedKernelWrapper], X2: Optional[List[EvaluatedKernelWrapper]] = None
-    ):
+    def get_hellinger_distance_matrix(self, X: List[EvaluatedKernelWrapper], X2: Optional[List[EvaluatedKernelWrapper]] = None):
         n1 = len(X)
         if X2 is None:
             hellinger_distances = np.zeros((n1, n1))
@@ -158,9 +157,7 @@ class KernelKernelHellinger(BaseObjectKernel):
                     hellinger_distances[i, j] = self.expected_hellinger_distance(X[i], X2[j])
         return hellinger_distances
 
-    def expected_hellinger_distance(
-        self, evaluated_kernel_wrapper_k1: EvaluatedKernelWrapper, evaluated_kernel_wrapper_k2: EvaluatedKernelWrapper
-    ):
+    def expected_hellinger_distance(self, evaluated_kernel_wrapper_k1: EvaluatedKernelWrapper, evaluated_kernel_wrapper_k2: EvaluatedKernelWrapper):
         k1_identifier = evaluated_kernel_wrapper_k1.kernel_identifier
         k2_identifier = evaluated_kernel_wrapper_k2.kernel_identifier
         if self.expected_distance_cache.check_if_in_cache(k1_identifier, k2_identifier):
@@ -208,10 +205,7 @@ class KernelKernelHellinger(BaseObjectKernel):
         neg_inf_counter = 0
         for i in range(0, self.num_param_samples):
             sobol_sample_list = tf.split(sobol_sequence[i], parameter_sizes)
-            reshaped_sobol_sample_list = [
-                tf.reshape(sobol_sample_list_element, parameter_shape)
-                for sobol_sample_list_element, parameter_shape in zip(sobol_sample_list, parameter_shapes)
-            ]
+            reshaped_sobol_sample_list = [tf.reshape(sobol_sample_list_element, parameter_shape) for sobol_sample_list_element, parameter_shape in zip(sobol_sample_list, parameter_shapes)]
             for j, parameters in enumerate(kernel.trainable_parameters):
                 parameter_sample = parameters.prior.quantile(reshaped_sobol_sample_list[j])
                 parameters.assign(parameter_sample)
@@ -228,7 +222,7 @@ class KernelKernelHellinger(BaseObjectKernel):
         logger.info(str(neg_inf_counter) + " of " + str(self.num_param_samples) + "  where neg infs")
         return gram_matrices, determinants
 
-    def get_slog_det(self, K: np.array) -> Tuple[np.array, np.float]:
+    def get_slog_det(self, K: np.array) -> Tuple[np.array, float]:
         # add jitter to increase numerical stability of cholesky decomposition inside log determinant calculation
         K_with_jitter = K + np.eye(len(self.virtual_X)) * self.jitter
         _, log_det_K = np.linalg.slogdet(K_with_jitter)
@@ -240,11 +234,7 @@ class KernelKernelHellinger(BaseObjectKernel):
 
     def transform_X(self, X: List[BaseKernelGrammarExpression]) -> List[EvaluatedKernelWrapper]:
         logger.info("-Check cache before computing gram matrices for new kernels")
-        logger.info(
-            "-Cache currently holds "
-            + str(self.evaluated_kernel_cache.get_number_of_cached_kernels())
-            + " evaluated kernels"
-        )
+        logger.info("-Cache currently holds " + str(self.evaluated_kernel_cache.get_number_of_cached_kernels()) + " evaluated kernels")
         evaluated_kernel_wrapper_list = []
         for x in X:
             assert isinstance(x, BaseKernelGrammarExpression)
@@ -254,14 +244,12 @@ class KernelKernelHellinger(BaseObjectKernel):
             else:
                 kernel = x.get_kernel()
                 gram_matrices_x, log_determinants_x = self.sample_over_hps(kernel)
-                evaluated_kernel_wrapper_x = EvaluatedKernelWrapper(
-                    gram_matrices_x, log_determinants_x, kernel_indentifier
-                )
+                evaluated_kernel_wrapper_x = EvaluatedKernelWrapper(gram_matrices_x, log_determinants_x, kernel_indentifier)
                 self.evaluated_kernel_cache.add_to_cache(kernel_indentifier, evaluated_kernel_wrapper_x)
             evaluated_kernel_wrapper_list.append(evaluated_kernel_wrapper_x)
         return evaluated_kernel_wrapper_list
 
-    def draw_from_kernel_hp_prior_and_assign(self, kernel) -> np.float:
+    def draw_from_kernel_hp_prior_and_assign(self, kernel) -> float:
         for parameter in kernel.trainable_parameters:
             new_value = parameter.prior.sample()
             parameter.assign(new_value)
@@ -277,9 +265,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     base_expression_1 = ElementaryKernelGrammarExpression(RBFKernel(**RBFWithPriorConfig(input_dimension=2).dict()))
-    base_expression_2 = ElementaryKernelGrammarExpression(
-        LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict())
-    )
+    base_expression_2 = ElementaryKernelGrammarExpression(LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict()))
     expression = KernelGrammarExpression(base_expression_1, base_expression_2, KernelGrammarOperator.ADD)
     expressions = [base_expression_1, base_expression_2, expression]
     expressions2 = [base_expression_1, base_expression_2]

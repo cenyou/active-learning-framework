@@ -12,9 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from alef.configs.kernels.kernel_grammar_generators.base_kernel_grammar_generator_config import (
-    BaseKernelGrammarGeneratorConfig,
-)
+from alef.configs.kernels.kernel_grammar_generators.base_kernel_grammar_generator_config import BaseKernelGrammarGeneratorConfig
 from alef.configs.kernels.kernel_grammar_generators.cks_high_dim_generator_config import CKSHighDimGeneratorConfig
 from alef.configs.kernels.kernel_grammar_generators.cks_with_rq_generator_config import (
     CKSWithRQGeneratorConfig,

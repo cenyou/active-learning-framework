@@ -12,27 +12,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import numpy as np
 import time
 from alef.kernels.kernel_grammar.kernel_grammar_candidate_generator import KernelGrammarCandidateGenerator
 from alef.oracles.base_object_oracle import BaseObjectOracle
 import logging
-import numpy as np
+from alef.utils.custom_logging import getLogger
 
 from alef.oracles.gp_model_bic_oracle import GPModelBICOracle
 from alef.oracles.gp_model_cv_oracle import GPModelCVOracle
 from alef.oracles.gp_model_evidence_oracle import GPModelEvidenceOracle
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class GreedyKernelSearch:
-    def __init__(
-        self,
-        limit_num_visited_neighbours: bool,
-        max_number_of_visited_neigbours: int,
-        start_with_base_kernels_only: bool,
-        **kwargs,
-    ):
+    def __init__(self, limit_num_visited_neighbours: bool, max_number_of_visited_neigbours: int, start_with_base_kernels_only: bool, **kwargs):
         self.candidate_generator = None
         self.oracle = None
         self.max_number_of_visited_neigbours = max_number_of_visited_neigbours
@@ -48,21 +43,12 @@ class GreedyKernelSearch:
         self.n_diff_initial = 0
 
     def set_candidate_generator(self, candidate_generator: KernelGrammarCandidateGenerator):
-        """
-        Set the candidate generator.
-        """
         self.candidate_generator = candidate_generator
 
     def set_oracle(self, oracle: BaseObjectOracle):
-        """
-        Set the oracle.
-        """
         self.oracle = oracle
 
     def sample_initial_dataset(self, n_data, seed=100, set_seed=False):
-        """
-        Sample the initial dataset.
-        """
         if self.start_with_base_kernels_only:
             if set_seed:
                 np.random.seed(seed)
@@ -82,31 +68,15 @@ class GreedyKernelSearch:
         self.y_data = np.expand_dims(np.array(y_list), axis=1)
 
     def get_current_best(self):
-        """
-        Get the current best candidate.
-        """
         return self.x_data[np.argmax(self.y_data)]
 
     def get_current_best_value(self):
-        """
-        Get the current best value.
-        """
         return np.max(self.y_data)
 
     def check_early_progress_to_next_stage(self, num_already_visited: int, max_at_stage: float):
-        """
-        Check if early progress to the next stage is needed.
-        """
-        return (
-            (num_already_visited > self.max_number_of_visited_neigbours)
-            and self.limit_num_visited_neighbours
-            and (self.get_current_best_value() > max_at_stage)
-        )
+        return (num_already_visited > self.max_number_of_visited_neigbours) and self.limit_num_visited_neighbours and (self.get_current_best_value() > max_at_stage)
 
     def maximize(self, depth: int):
-        """
-        Maximize the objective function.
-        """
         self.validation_metrics.append(self.get_current_best_value())
         self.current_bests.append((self.get_current_best(), self.get_current_best_value()))
         time_stamp_iteration = time.perf_counter()
@@ -121,7 +91,7 @@ class GreedyKernelSearch:
                 logger.info("Query: " + str(neighbour))
                 time_before_oracle = time.perf_counter()
                 y_neighbour, _ = self.oracle.query(neighbour)
-                self.query_list.append((neighbour, np.float(y_neighbour)))
+                self.query_list.append((neighbour, float(y_neighbour)))
                 time_after_oracle = time.perf_counter()
                 oracle_time = time_after_oracle - time_before_oracle
                 self.oracle_time_list.append(oracle_time)
@@ -150,15 +120,8 @@ class GreedyKernelSearch:
         )
 
     def add_test_set_metrics(self, index):
-        """
-        Add test set metrics.
-        """
         new_index = index - self.n_diff_initial
         if new_index % self.test_set_metrics_index_interval == 0 and new_index >= 0:
-            if (
-                isinstance(self.oracle, GPModelBICOracle)
-                or isinstance(self.oracle, GPModelEvidenceOracle)
-                or isinstance(self.oracle, GPModelCVOracle)
-            ):
+            if isinstance(self.oracle, GPModelBICOracle) or isinstance(self.oracle, GPModelEvidenceOracle) or isinstance(self.oracle, GPModelCVOracle):
                 test_set_metric_tuple = self.oracle.query_on_test_set(self.get_current_best())
                 self.test_set_metrics.append((new_index, *test_set_metric_tuple))

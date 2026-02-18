@@ -16,7 +16,7 @@ import time
 import traceback
 from matplotlib.colors import NoNorm
 import numpy as np
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional, Callable
 import gpflow
 from gpflow.utilities import print_summary, set_trainable
 from tensorflow_probability import distributions as tfd
@@ -25,15 +25,18 @@ from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.utils.plotter2D import Plotter2D
 from alef.utils.utils import normal_entropy
 from alef.models.base_model import BaseModel
+from alef.models.gprc import GPRC_Binary
 from scipy.stats import multivariate_normal
 from alef.models.batch_model_interface import BatchModelInterace
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
 from scipy.stats import norm
+from enum import Enum
 from alef.enums.global_model_enums import PredictionQuantity, InitialParameters
 import tensorflow as tf
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class GPModel(BaseModel, BatchModelInterace):
@@ -70,6 +73,7 @@ class GPModel(BaseModel, BatchModelInterace):
         n_starts_for_multistart_opt: int,
         expected_observation_noise: float,
         prediction_quantity: PredictionQuantity,
+        classification: bool=False,
         **kwargs,
     ):
         self.kernel = gpflow.utilities.deepcopy(kernel)
@@ -82,8 +86,8 @@ class GPModel(BaseModel, BatchModelInterace):
         self.optimize_hps = optimize_hps
         self.train_likelihood_variance = train_likelihood_variance
         self.use_mean_function = False
-        self.last_opt_time = None
-        self.last_multi_start_opt_time = None
+        self.last_opt_time = 0
+        self.last_multi_start_opt_time = 0
         self.initial_parameter_strategy = initial_parameter_strategy
         self.initial_uniform_lower_bound = initial_uniform_lower_bound
         self.initial_uniform_upper_bound = initial_uniform_upper_bound
@@ -98,11 +102,18 @@ class GPModel(BaseModel, BatchModelInterace):
         self.set_prior_on_observation_noise = set_prior_on_observation_noise
         self.expected_observation_noise = expected_observation_noise
         self.prediction_quantity = prediction_quantity
+        self.classification = classification
         self.print_summaries = True
         if isinstance(kernel, RegularizedKernelInterface):
             self.add_kernel_hp_regularizer = True
         else:
             self.add_kernel_hp_regularizer = False
+
+    def reset_kernel_parameter_lower_bound( self, variable_name, lower):
+        self.kernel.reset_parameter_lower_bound( variable_name, lower )
+        self.kernel_initial_parameter_cache = GPParameterCache()
+        if not isinstance(self.kernel, InputInitializedKernelInterface):
+            self.kernel_initial_parameter_cache.store_parameters_from_model(self.kernel)
 
     def set_kernel(self, kernel):
         """
@@ -125,7 +136,7 @@ class GPModel(BaseModel, BatchModelInterace):
             return gpflow.utilities.deepcopy(self.kernel)
         return self.kernel
 
-    def get_learned_observation_noise(self) -> np.float:
+    def get_learned_observation_noise(self) -> float:
         assert self.model is not None
         return np.sqrt(self.model.likelihood.variance.numpy())
 
@@ -159,7 +170,7 @@ class GPModel(BaseModel, BatchModelInterace):
         assert len(self.model.trainable_parameters) == 2
         param_to_name = {param: name for name, param in gpflow.utilities.parameter_dict(self.model).items()}
         copied_model = gpflow.utilities.deepcopy(self.model)
-        assert isinstance(copied_model, gpflow.models.gpr.GPR)
+        assert isinstance(copied_model, gpflow.models.GPR)
         x_values = []
         f_values = []
         if add_second_ranges:
@@ -250,28 +261,46 @@ class GPModel(BaseModel, BatchModelInterace):
         """
         self.n_starts_for_multistart_opt = n_starts
 
-    def infer(self, x_data: np.array, y_data: np.array):
+    def infer(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
         """
         Main entrance method for learning the model - training methods are called if hp should be done otherwise only gpflow model is build
 
         Arguments:
             x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
             y_data: Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
         """
-        self.build_model(x_data, y_data)
+        self.build_model(x_data, y_data, class_mask)
         if self.optimize_hps:
             if self.perform_multi_start_optimization:
                 self.multi_start_optimization(self.n_starts_for_multistart_opt)
             else:
                 self.optimize()
 
-    def build_model(self, x_data: np.array, y_data: np.array):
+    def set_model_data(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
+        """
+        Method to manipulate observations without altering GP object
+
+        Arguments:
+            x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
+            y_data: Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
+        """
+        assert hasattr(self, 'model')
+        assert isinstance(self.model, gpflow.models.GPR)
+        self.model.data = gpflow.models.util.data_input_to_tensor((x_data, y_data))
+        class_mask = np.zeros_like(y_data)[..., 0] if class_mask is None else class_mask
+        if self.classification:
+            self.model.class_mask = tf.cast(class_mask, bool)
+
+    def build_model(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
         """
         Method to build to gpflow model object
 
         Arguments:
             x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
             y_data: Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
         """
         assert len(y_data.shape) == 2
         if isinstance(self.kernel, InputInitializedKernelInterface):
@@ -279,17 +308,25 @@ class GPModel(BaseModel, BatchModelInterace):
             self.kernel_initial_parameter_cache.clear()
             self.kernel_initial_parameter_cache.store_parameters_from_model(self.kernel)
 
+        if not self.classification:
+            model = gpflow.models.GPR
+            yy = y_data
+        else:
+            model = GPRC_Binary
+            class_mask = np.zeros_like(y_data)[..., 0] if class_mask is None else class_mask
+            yy = np.hstack((y_data, class_mask[..., None]))
+            
         if self.use_mean_function:
-            self.model = gpflow.models.GPR(
-                data=(x_data, y_data),
+            self.model = model(
+                data=(x_data, yy),
                 kernel=self.kernel,
                 mean_function=self.mean_function,
                 noise_variance=np.power(self.observation_noise, 2.0),
             )
-            set_trainable(self.model.mean_function.c, False)
+            set_trainable(self.model.mean_function, False)
         else:
-            self.model = gpflow.models.GPR(
-                data=(x_data, y_data),
+            self.model = model(
+                data=(x_data, yy),
                 kernel=self.kernel,
                 mean_function=None,
                 noise_variance=np.power(self.observation_noise, 2.0),
@@ -313,7 +350,7 @@ class GPModel(BaseModel, BatchModelInterace):
 
         optimizer = gpflow.optimizers.Scipy()
         optimization_success = False
-        while not optimization_success:
+        while not optimization_success and len(self.model.trainable_variables) > 0:
             try:
                 time_before_opt = time.perf_counter()
                 opt_res = optimizer.minimize(self.training_loss, self.model.trainable_variables)
@@ -378,7 +415,7 @@ class GPModel(BaseModel, BatchModelInterace):
                 opt_time = 0.0
                 self.multi_start_losses = []
                 for i in range(0, n_starts):
-                    logger.info(f"Optimization repeat {i + 1}/{n_starts}")
+                    logger.debug(f"Optimization repeat {i+1}/{n_starts}")
                     self.optimize()
                     after_optim = time.perf_counter()
                     loss = self.training_loss()
@@ -387,10 +424,10 @@ class GPModel(BaseModel, BatchModelInterace):
                     after_loss_calc = time.perf_counter()
                     opt_time += self.get_last_opt_time() + (after_loss_calc - after_optim)
                     if self.add_kernel_hp_regularizer:
-                        logger.info(f"Loss for run: {loss}")
+                        logger.debug(f"Loss for run: {loss}")
                     else:
                         log_marginal_likelihood = -1 * loss
-                        logger.info(f"Log marginal likeli for run: {log_marginal_likelihood}")
+                        logger.debug(f"Log marginal likeli for run: {log_marginal_likelihood}")
                 self.parameter_cache.load_best_parameters_to_model(self.model)
                 self.last_multi_start_opt_time = opt_time
                 logger.debug("Chosen parameter values:")
@@ -409,7 +446,7 @@ class GPModel(BaseModel, BatchModelInterace):
         if logger.isEnabledFor(logging.DEBUG):
             print_summary(self.model)
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         """
         Estimates the model evidence - always retrieves marg likelihood, also when HPs are provided with prior!!
 
@@ -441,9 +478,7 @@ class GPModel(BaseModel, BatchModelInterace):
             unconstrained_value = variable.numpy()
             factor = 1 + np.random.uniform(-1 * factor_bound, factor_bound, size=unconstrained_value.shape)
             if np.isclose(unconstrained_value, 0.0, rtol=1e-07, atol=1e-09).all():
-                new_unconstrained_value = (
-                    unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)
-                ) * factor
+                new_unconstrained_value = (unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)) * factor
             else:
                 new_unconstrained_value = unconstrained_value * factor
             variable.assign(new_unconstrained_value)
@@ -456,9 +491,7 @@ class GPModel(BaseModel, BatchModelInterace):
             elif parameter.name == "softplus":
                 sample = tfd.Uniform(low=1e-9, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             else:
-                sample = tfd.Uniform(
-                    low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound
-                ).sample(sample_shape=shape)
+                sample = tfd.Uniform(low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             parameter.assign(sample.numpy())
 
     def get_number_of_trainable_parameters(self):
@@ -519,9 +552,15 @@ class GPModel(BaseModel, BatchModelInterace):
             pred_mus, pred_cov = self.model.predict_y(x_test, full_cov=True)
         return np.squeeze(pred_mus), np.squeeze(pred_cov)
 
-    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> np.float:
+    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> float:
         pred_mus, pred_cov = self.predict_full_cov(x_test)
-        entropy = multivariate_normal(pred_mus, pred_cov).entropy()
+        if len(x_test.shape) <= 1 or x_test.shape[0] == 1:
+            # Univariate Gaussian entropy: 0.5 * log(2 * pi * e * variance)
+            entropy = np.atleast_1d(
+                0.5 * (1 + np.log(2 * np.pi * pred_cov))
+            )
+        else:
+            entropy = multivariate_normal(pred_mus, pred_cov).entropy()
         return entropy
 
     def entropy_predictive_dist(self, x_test: np.array) -> np.array:
@@ -542,7 +581,7 @@ class GPModel(BaseModel, BatchModelInterace):
         entropies = normal_entropy(pred_sigmas)
         return entropies
 
-    def calculate_complete_information_gain(self, x_data: np.array) -> np.float:
+    def calculate_complete_information_gain(self, x_data: np.array) -> float:
         n = x_data.shape[0]
         gram_matrix = self.model.kernel.K(x_data)
         identity = np.identity(n)

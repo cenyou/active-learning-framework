@@ -12,16 +12,20 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import numpy as np
 import tensorflow as tf
 import torch
 import gpflow
 import gpytorch
 
-from typing import Union
-
+from typing import Union, List, Optional
+from alef.enums.environment_enums import GPFramework
 
 class _SeparableCholeskyDecompositionTF:
-    def __init__(self, kernel: gpflow.kernels.Kernel):
+    def __init__(
+        self,
+        kernel: gpflow.kernels.Kernel
+    ):
         self.kernel = kernel
         self._x = None
         self._L = None
@@ -39,16 +43,19 @@ class _SeparableCholeskyDecompositionTF:
         Kst = self.kernel(self._x, x_new)
         noise = noise_variance * tf.eye(N, dtype=Kst.dtype)
         Kt = self.kernel(x_new) + noise
-
+        
         Ls = self._L
         corner_T = tf.linalg.triangular_solve(Ls, Kst, lower=True, adjoint=False)
-        corner = tf.einsum("...ij->...ji", corner_T)
-        Lt = tf.linalg.cholesky(Kt - tf.matmul(corner, corner_T))
+        corner = tf.einsum('...ij->...ji', corner_T)
+        Lt = tf.linalg.cholesky(
+            Kt - tf.matmul(corner, corner_T)
+        )
 
         self._x = tf.concat([self._x, x_new], axis=-2)
-        self._L = tf.concat(
-            [tf.concat([Ls, tf.zeros_like(corner_T)], axis=-1), tf.concat([corner, Lt], axis=-1)], axis=-2
-        )
+        self._L = tf.concat([
+            tf.concat([Ls, tf.zeros_like(corner_T)], axis=-1),
+            tf.concat([corner, Lt], axis=-1)
+        ], axis=-2)
 
     def new_cholesky(self, x, noise_variance):
         if self._x is None:
@@ -57,9 +64,12 @@ class _SeparableCholeskyDecompositionTF:
             self._update_cholesky(x, noise_variance)
         return self._L
 
-
 class _SeparableCholeskyDecompositionTorch:
-    def __init__(self, kernel: gpytorch.kernels.Kernel, device=torch.device("cpu")):
+    def __init__(
+        self,
+        kernel: gpytorch.kernels.Kernel,
+        device = torch.device('cpu')
+    ):
         self.kernel = kernel
         self.device = device
         self._x = None
@@ -67,29 +77,32 @@ class _SeparableCholeskyDecompositionTorch:
 
     def _initialize_cholesky(self, x, noise_variance):
         assert isinstance(x, torch.Tensor)
-        N = x.size(dim=-2)
+        N = x.size(dim = -2)
         K = self.kernel(x)
         noise = noise_variance * torch.eye(N, device=self.device)
 
         self._x = x
-        self._L = torch.linalg.cholesky(K.evaluate() + noise)
+        self._L = torch.linalg.cholesky(K.to_dense() + noise)
 
     def _update_cholesky(self, x_new, noise_variance):
         assert isinstance(x_new, torch.Tensor)
-        N = x_new.size(dim=-2)
-        Kst = self.kernel(self._x, x_new).evaluate()
+        N = x_new.size(dim = -2)
+        Kst = self.kernel(self._x, x_new).to_dense()
         noise = noise_variance * torch.eye(N, device=self.device)
-        Kt = self.kernel(x_new).evaluate() + noise
+        Kt = self.kernel(x_new).to_dense() + noise
 
         Ls = self._L
         corner_T = torch.linalg.solve_triangular(Ls, Kst, upper=False)
-        corner = torch.einsum("...ij->...ji", corner_T)
-        Lt = torch.linalg.cholesky(Kt - torch.matmul(corner, corner_T))
+        corner = torch.einsum('...ij->...ji', corner_T)
+        Lt = torch.linalg.cholesky(
+            Kt - torch.matmul(corner, corner_T)
+        )
 
         self._x = torch.cat([self._x, x_new], dim=-2)
-        self._L = torch.cat(
-            (torch.cat((Ls, torch.zeros_like(corner_T)), dim=-1), torch.cat((corner, Lt), dim=-1)), dim=-2
-        )
+        self._L = torch.cat((
+            torch.cat((Ls, torch.zeros_like(corner_T)), dim=-1),
+            torch.cat((corner, Lt), dim=-1)
+        ), dim=-2)
 
     def new_cholesky(self, x, noise_variance):
         if self._x is None:
@@ -98,9 +111,12 @@ class _SeparableCholeskyDecompositionTorch:
             self._update_cholesky(x, noise_variance)
         return self._L
 
-
 class SeparableCholeskyDecomposition:
-    def __init__(self, kernel: Union[gpflow.kernels.Kernel, gpytorch.kernels.Kernel], device=torch.device("cpu")):
+    def __init__(
+        self,
+        kernel: Union[gpflow.kernels.Kernel, gpytorch.kernels.Kernel],
+        device=torch.device('cpu')
+    ):
         self.kernel = kernel
         if isinstance(kernel, gpflow.kernels.Kernel):
             self._decomposer = _SeparableCholeskyDecompositionTF(kernel)
@@ -115,3 +131,4 @@ class SeparableCholeskyDecomposition:
 
     def new_cholesky(self, x, noise_variance):
         return self._decomposer.new_cholesky(x, noise_variance)
+

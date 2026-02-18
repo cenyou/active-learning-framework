@@ -26,13 +26,13 @@ class BasicSparseGPModelConfig(BaseModelConfig):
     n_inducing_points: int = 100
     train_likelihood_variance: bool = True
     sample_initial_parameters_at_start: bool = True
-    initial_parameter_strategy: InitialParameters = InitialParameters.UNIFORM_DISTRIBUTION
+    initial_parameter_strategy: InitialParameters = InitialParameters.PERTURB
     perturbation_for_multistart_opt: float = 0.5
     perturbation_for_singlestart_opt: float = 0.1
-    initial_uniform_lower_bound: float = -1.0
-    initial_uniform_upper_bound: float = 1.0
+    initial_uniform_lower_bound: float = -0.5
+    initial_uniform_upper_bound: float = 0.5
     perform_multi_start_optimization: bool = True
-    n_starts_for_multistart_opt: int = 4
+    n_starts_for_multistart_opt: int = 5
     set_prior_on_observation_noise: bool = False
     expected_observation_noise: float = EXPECTED_OBSERVATION_NOISE
     prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y

@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import tensorflow as tf
+from tensorflow.python.framework.constant_op import constant
 import tensorflow_probability as tfp
 import numpy as np
 from typing import List
@@ -104,3 +105,13 @@ class NeuralODE(tf.Module):
             gradients = tape.gradient(current_loss, self.trainable_variables)
             for i, variable in enumerate(self.trainable_variables):
                 variable.assign_sub(learning_rate * gradients[i])
+
+
+if __name__ == "__main__":
+    neural_ode = NeuralODE([3, 4], 2)
+    a = np.array([[1.0, 2.0], [3.0, 3.2], [3.0, 1.0]])
+    b = np.array([[3.0, 1.0], [4.0, 1.2], [2.0, 0.0]])
+    # a = tf.constant(a,dtype=tf.float32)
+    # neural_ode.ode(0.0,a,**neural_ode.variable_dict)
+    neural_ode.train(a, b, 0.0, 1.0, 20, 0.05)
+    print(neural_ode.forward(0.0, a, 1.0))

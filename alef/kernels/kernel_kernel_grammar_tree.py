@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from ast import operator
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 import gpflow
@@ -22,7 +23,7 @@ import numpy as np
 from alef.configs.kernels.linear_configs import LinearWithPriorConfig
 from alef.configs.kernels.periodic_configs import PeriodicWithPriorConfig
 from alef.configs.kernels.rational_quadratic_configs import RQWithPriorConfig
-from alef.configs.kernels.rbf_configs import RBFWithPriorConfig
+from alef.configs.kernels.rbf_configs import BasicRBFConfig, RBFWithPriorConfig
 from alef.kernels.base_object_kernel import BaseObjectKernel
 from alef.kernels.kernel_grammar.kernel_grammar import (
     BaseKernelGrammarExpression,
@@ -32,20 +33,17 @@ from alef.kernels.kernel_grammar.kernel_grammar import (
     KernelGrammarOperator,
 )
 import tensorflow as tf
-from alef.kernels.kernel_grammar.optimal_transport_mappings import (
-    DimWiseWeightedDistanceExtractor,
-    KernelGrammarTreeDistanceMapper,
-)
+from alef.kernels.kernel_grammar.optimal_transport_mappings import DimWiseWeightedDistanceExtractor, KernelGrammarTreeDistanceMapper
 
 from alef.kernels.linear_kernel import LinearKernel
 from alef.kernels.rational_quadratic_kernel import RationalQuadraticKernel
 from alef.kernels.rbf_kernel import RBFKernel
 from alef.kernels.periodic_kernel import PeriodicKernel
 from alef.utils.utils import manhatten_distance
-import tensorflow_probability as tfp
 
 gpflow.config.set_default_float(np.float64)
 gpflow.config.set_default_jitter(1e-4)
+import tensorflow_probability as tfp
 
 f64 = gpflow.utilities.to_default_float
 
@@ -63,16 +61,6 @@ class BaseKernelGrammarKernel(BaseObjectKernel):
         self.transform_to_normal = transform_to_normal
 
     def K(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None):
-        """
-        Computes the kernel matrix between the given sets of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the kernel matrix for X with itself.
-
-        Returns:
-            Kernel matrix as a TensorFlow tensor.
-        """
         if X2 is None:
             X = self.internal_transform_X(X)
             self.create_hash_array_mapping(X)
@@ -94,16 +82,10 @@ class BaseKernelGrammarKernel(BaseObjectKernel):
             weighted_feature_matrix_X = tf.math.multiply(weighting_vector, feature_matrix_X)
             weighted_feature_matrix_X2 = tf.math.multiply(weighting_vector, feature_matrix_X2)
             diag_K_X = tf.expand_dims(
-                tf.linalg.diag_part(
-                    tf.linalg.matmul(weighted_feature_matrix_X, tf.transpose(weighted_feature_matrix_X))
-                ),
-                axis=1,
+                tf.linalg.diag_part(tf.linalg.matmul(weighted_feature_matrix_X, tf.transpose(weighted_feature_matrix_X))), axis=1
             )
             diag_K_X2 = tf.expand_dims(
-                tf.linalg.diag_part(
-                    tf.linalg.matmul(weighted_feature_matrix_X2, tf.transpose(weighted_feature_matrix_X2))
-                ),
-                axis=1,
+                tf.linalg.diag_part(tf.linalg.matmul(weighted_feature_matrix_X2, tf.transpose(weighted_feature_matrix_X2))), axis=1
             )
             normalizer = tf.matmul(tf.sqrt(diag_K_X), tf.sqrt(tf.transpose(diag_K_X2)))
             K_values = tf.linalg.matmul(weighted_feature_matrix_X, tf.transpose(weighted_feature_matrix_X2))
@@ -111,25 +93,14 @@ class BaseKernelGrammarKernel(BaseObjectKernel):
             return K
 
     def K_diag(self, X: List[BaseKernelGrammarExpression]):
-        """
-        Computes the diagonal of the kernel matrix for the given set of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            Diagonal of the kernel matrix as a TensorFlow tensor.
-        """
         X = self.internal_transform_X(X)
         diag = self.variance * tf.ones(len(X), dtype=default_float())
         return diag
 
     def create_hash_array_mapping(self, tree_dict_list: List[StructuredDict]):
         """
-        Creates a mapping from substructure hashes to feature vector indices.
-
-        Args:
-            tree_dict_list: List of dictionaries containing substructure information.
+        Creates big dict for all substructures (depending of child e.g. subtrees or path to elementaries) in the dataset. Maps substructure of tree (referenced by its hash) to an index in the feature vector
+        Stores index and substructure meta info in dict key=hash of substructure value=[index,MetaInfoObject]
         """
         self.big_index_dict = {}
         index = 0
@@ -141,57 +112,24 @@ class BaseKernelGrammarKernel(BaseObjectKernel):
                     index += 1
 
     def get_feature_vector_length(self):
-        """
-        Returns the length of the feature vector.
-
-        Returns:
-            Length of the feature vector.
-        """
         return len(self.big_index_dict)
 
     def feature_matrix(self, X: List[StructuredDict]) -> np.array:
         """
-        Creates the feature matrix for the given set of structured dictionaries.
-
-        Args:
-            X: List of structured dictionaries.
-
-        Returns:
-            Feature matrix as a NumPy array.
+        Creates feature matrix with shape [n_elements,n_features]
         """
         raise NotImplementedError
 
     def get_weighting_vector(self) -> tf.Tensor:
         """
-        Returns the learnable weighting vector.
-
-        Returns:
-            Weighting vector as a TensorFlow tensor.
+        returns learnable weighting vector with shape [n_features]
         """
         raise NotImplementedError
 
     def internal_transform_X(self, X: List[BaseKernelGrammarExpression]) -> List[StructuredDict]:
-        """
-        Transforms the input kernel grammar expressions into structured dictionaries.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            List of structured dictionaries.
-        """
         raise NotImplementedError
 
     def transform_X(self, X: List[BaseKernelGrammarExpression]) -> List[BaseKernelGrammarExpression]:
-        """
-        Transforms the input kernel grammar expressions to their normal form if required.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            List of transformed kernel grammar expressions.
-        """
         if self.transform_to_normal:
             new_X = []
             for x in X:
@@ -206,73 +144,29 @@ class SumKernelKernelGrammarTree(BaseKernelGrammarKernel):
         super().__init__(1.0, False, transform_to_normal)
         self.kernel_kernel_list = kernel_kernel_list
 
-    def K(
-        self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None
-    ) -> tf.Tensor:
-        """
-        Computes the sum of kernel matrices from the list of kernel kernels.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the kernel matrix for X with itself.
-
-        Returns:
-            Summed kernel matrix as a TensorFlow tensor.
-        """
+    def K(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None) -> tf.Tensor:
         if X2 is None:
             return tf.add_n([k.K(X, X2=None) for k in self.kernel_kernel_list])
         else:
             return tf.add_n([k.K(X, X2) for k in self.kernel_kernel_list])
 
     def K_diag(self, X: List[BaseKernelGrammarExpression]) -> tf.Tensor:
-        """
-        Computes the diagonal of the summed kernel matrix for the given set of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            Diagonal of the summed kernel matrix as a TensorFlow tensor.
-        """
         return tf.add_n([k.K_diag(X) for k in self.kernel_kernel_list])
 
 
 class MultiplyKernelGrammarKernels(BaseKernelGrammarKernel):
-    def __init__(
-        self, kernel_1: BaseKernelGrammarKernel, kernel_2: BaseKernelGrammarKernel, transform_to_normal: bool, **kwargs
-    ):
+    def __init__(self, kernel_1: BaseKernelGrammarKernel, kernel_2: BaseKernelGrammarKernel, transform_to_normal: bool, **kwargs):
         super().__init__(1.0, False, transform_to_normal)
         self.kernel_1 = kernel_1
         self.kernel_2 = kernel_2
 
-    def K(
-        self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None
-    ) -> tf.Tensor:
-        """
-        Computes the product of kernel matrices from the two kernel kernels.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the kernel matrix for X with itself.
-
-        Returns:
-            Product kernel matrix as a TensorFlow tensor.
-        """
+    def K(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None) -> tf.Tensor:
         if X2 is None:
             return tf.multiply(self.kernel_1.K(X), self.kernel_2.K(X))
         else:
             return tf.multiply(self.kernel_1.K(X, X2), self.kernel_2.K(X, X2))
 
     def K_diag(self, X: List[BaseKernelGrammarExpression]) -> tf.Tensor:
-        """
-        Computes the diagonal of the product kernel matrix for the given set of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            Diagonal of the product kernel matrix as a TensorFlow tensor.
-        """
         return tf.multiply(self.kernel_1.K_diag(X), self.kernel_2.K_diag(X))
 
 
@@ -285,10 +179,7 @@ class KernelGrammarSubtreeKernel(BaseKernelGrammarKernel):
 
     def get_weighting_vector(self) -> tf.Tensor:
         """
-        Returns the learnable weighting vector based on the subtree sizes.
-
-        Returns:
-            Weighting vector as a TensorFlow tensor.
+        returns learnable weighting vector with shape [n_features]
         """
         p_vec = tf.convert_to_tensor(self.get_sub_tree_size_vector(), dtype=default_float())
         weighting_vector = tf.sqrt(tf.math.pow(self.lamb, p_vec))
@@ -296,13 +187,7 @@ class KernelGrammarSubtreeKernel(BaseKernelGrammarKernel):
 
     def feature_matrix(self, X: List[StructuredDict]) -> np.array:
         """
-        Creates the feature matrix for the given set of structured dictionaries.
-
-        Args:
-            X: List of structured dictionaries.
-
-        Returns:
-            Feature matrix as a NumPy array.
+        Creates feature matrix with shape [n_elements,n_features]
         """
         feature_matrix = []
         for subtree_dict in X:
@@ -311,12 +196,6 @@ class KernelGrammarSubtreeKernel(BaseKernelGrammarKernel):
         return np.array(feature_matrix)
 
     def get_sub_tree_size_vector(self):
-        """
-        Returns the vector of subtree sizes.
-
-        Returns:
-            Vector of subtree sizes as a NumPy array.
-        """
         p_vec = np.zeros(len(self.big_index_dict))
         for key in self.big_index_dict:
             subtree_meta_info = self.big_index_dict[key][1]
@@ -324,30 +203,12 @@ class KernelGrammarSubtreeKernel(BaseKernelGrammarKernel):
         return p_vec
 
     def subtree_dict_to_feature_vector(self, subtree_dict_kernel: StructuredDict):
-        """
-        Converts a subtree dictionary to a feature vector.
-
-        Args:
-            subtree_dict_kernel: Dictionary containing subtree information.
-
-        Returns:
-            Feature vector as a NumPy array.
-        """
         feature_vec = np.zeros(len(self.big_index_dict))
         for key in subtree_dict_kernel:
             feature_vec[self.big_index_dict[key][0]] = subtree_dict_kernel[key][0]
         return feature_vec
 
     def internal_transform_X(self, X: List[BaseKernelGrammarExpression]) -> List[StructuredDict]:
-        """
-        Transforms the input kernel grammar expressions into structured dictionaries.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            List of structured dictionaries.
-        """
         dict_list = []
         for kernel_grammar_expression in X:
             subtree_dict = kernel_grammar_expression.get_subtree_dict()
@@ -399,14 +260,12 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         use_hyperprior: bool,
         lengthscale_prior_parameters: Tuple[float, float],
         variance_prior_parameters: Tuple[float, float],
-        **kwargs,
+        **kwargs
     ):
         super().__init__(1.0, False, transform_to_normal)
         transform = tfp.bijectors.Sigmoid(low=None, high=None, validate_args=False, name="sigmoid")
         train_alpha = parameters_trainable and alpha_trainable
-        self.alphas = gpflow.Parameter(
-            f64(np.repeat(base_alpha, len(feature_type_list))), transform=transform, trainable=train_alpha
-        )
+        self.alphas = gpflow.Parameter(f64(np.repeat(base_alpha, len(feature_type_list))), transform=transform, trainable=train_alpha)
         self.lengthscale = gpflow.Parameter(f64(base_lengthscale), transform=positive(), trainable=parameters_trainable)
         self.variance = gpflow.Parameter(f64(base_variance), transform=positive(), trainable=parameters_trainable)
         if use_hyperprior:
@@ -417,63 +276,20 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         self.feature_type_list = feature_type_list
 
     def K(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None):
-        """
-        Computes the kernel matrix using the Wasserstein distance between the given sets of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the kernel matrix for X with itself.
-
-        Returns:
-            Kernel matrix as a TensorFlow tensor.
-        """
         distance_matrix = self.wasserstein_distance(X, X2)
         K = self.variance * tf.math.exp(-1 * distance_matrix / tf.pow(self.lengthscale, 2.0))
         return K
 
     def K_diag(self, X: List[BaseKernelGrammarExpression]):
-        """
-        Computes the diagonal of the kernel matrix using the Wasserstein distance for the given set of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            Diagonal of the kernel matrix as a TensorFlow tensor.
-        """
         distance_matrix = self.wasserstein_distance(X)
         diag_distance = tf.linalg.diag_part(distance_matrix)
         K_diag = self.variance * tf.math.exp(-1 * diag_distance / tf.pow(self.lengthscale, 2.0))
         return K_diag
 
-    def get_distance_matrix(
-        self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None
-    ):
-        """
-        Computes the distance matrix using the Wasserstein distance between the given sets of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the distance matrix for X with itself.
-
-        Returns:
-            Distance matrix as a TensorFlow tensor.
-        """
+    def get_distance_matrix(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None):
         return self.wasserstein_distance(X, X2)
 
-    def get_manhatten_distances(
-        self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None
-    ):
-        """
-        Computes the Manhattan distances between the given sets of kernel grammar expressions for each feature type.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the distances for X with itself.
-
-        Returns:
-            List of Manhattan distance matrices for each feature type.
-        """
+    def get_manhatten_distances(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None):
         if X2 is None:
             manhatten_distances = []
             for feature_type in self.feature_type_list:
@@ -496,52 +312,27 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
                     dtype=default_float(),
                 )
                 X2_feature_matrix = tf.convert_to_tensor(
-                    self.feature_matrix(
-                        X2_feature, index_dict_feature, normalize=self.normalize_features(feature_type)
-                    ),
+                    self.feature_matrix(X2_feature, index_dict_feature, normalize=self.normalize_features(feature_type)),
                     dtype=default_float(),
                 )
                 manhatten_distance_feature = manhatten_distance(X_feature_matrix, X2_feature_matrix)
                 manhatten_distances.append(manhatten_distance_feature)
         return manhatten_distances
 
-    def wasserstein_distance(
-        self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None
-    ):
-        """
-        Computes the Wasserstein distance between the given sets of kernel grammar expressions.
-
-        Args:
-            X: List of kernel grammar expressions.
-            X2: Optional list of kernel grammar expressions. If None, computes the distance for X with itself.
-
-        Returns:
-            Wasserstein distance matrix as a TensorFlow tensor.
-        """
+    def wasserstein_distance(self, X: List[BaseKernelGrammarExpression], X2: Optional[List[BaseKernelGrammarExpression]] = None):
         manhatten_distances = self.get_manhatten_distances(X, X2)
         distance_weighting = tf.expand_dims(tf.expand_dims(self.alphas / tf.reduce_sum(self.alphas), axis=1), axis=2)
         manhatten_distances_stacked = tf.stack(manhatten_distances)
         distance_matrix = tf.reduce_sum(tf.multiply(distance_weighting, manhatten_distances_stacked), axis=0)
         return distance_matrix
 
-    def internal_transform_X(
-        self, X: List[BaseKernelGrammarExpression], feature_type: FeatureType
-    ) -> List[StructuredDict]:
+    def internal_transform_X(self, X: List[BaseKernelGrammarExpression], feature_type: FeatureType) -> List[StructuredDict]:
         """
-        Extracts the feature vectors from the list of kernel grammar expressions based on the specified feature type.
-
-        Args:
-            X: List of kernel grammar expressions.
-            feature_type: Feature type to extract.
-
-        Returns:
-            List of structured dictionaries containing the extracted features.
+        Internal method that extracts the feature vectors from the list of BaseKernelGrammarExpression objects.
         """
         dict_list = []
         if feature_type == FeatureType.ONE_GRAM_TREE_METRIC:
-            tree_distance_mapper = KernelGrammarTreeDistanceMapper(
-                X[0].get_generator_name(), X[0].get_input_dimension()
-            )
+            tree_distance_mapper = KernelGrammarTreeDistanceMapper(X[0].get_generator_name(), X[0].get_input_dimension())
         if feature_type == FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT:
             dim_wise_mapper = DimWiseWeightedDistanceExtractor(X[0].get_generator_name(), X[0].get_input_dimension())
 
@@ -553,9 +344,7 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
             elif feature_type == FeatureType.ELEMENTARIES_UNDER_ADD:
                 feature_dict = kernel_grammar_expression.get_elementary_below_operator_dict(KernelGrammarOperator.ADD)
             elif feature_type == FeatureType.ELEMENTARIES_UNDER_MULT:
-                feature_dict = kernel_grammar_expression.get_elementary_below_operator_dict(
-                    KernelGrammarOperator.MULTIPLY
-                )
+                feature_dict = kernel_grammar_expression.get_elementary_below_operator_dict(KernelGrammarOperator.MULTIPLY)
             elif feature_type == FeatureType.SUBTREES:
                 feature_dict = kernel_grammar_expression.get_subtree_dict()
             elif feature_type == FeatureType.REDUCED_ELEMENTARY_PATHS:
@@ -576,13 +365,9 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
 
     def check_feature_dict(self, feature_dict):
         """
-        Checks the validity of the feature dictionary.
-
-        Args:
-            feature_dict: Dictionary containing feature information.
-
-        Raises:
-            AssertionError: If the feature dictionary is invalid.
+        Checks validity of feature dict - feature dict must contain at least one key
+        - every extracted feature (referred by a key) needs to have a count of at least one
+        - thus it is not allowed to refer to a feature that is actually not in the expression.
         """
         has_value = False
         for key in feature_dict:
@@ -595,15 +380,6 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         assert has_value
 
     def normalize_features(self, feature_type):
-        """
-        Determines whether the features should be normalized based on the feature type.
-
-        Args:
-            feature_type: Feature type to check.
-
-        Returns:
-            Boolean indicating whether the features should be normalized.
-        """
         if feature_type == FeatureType.ONE_GRAM_TREE_METRIC:
             return False
         elif feature_type == FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT:
@@ -611,15 +387,6 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         return True
 
     def create_hash_array_mapping(self, tree_dict_list: List[StructuredDict]) -> StructuredDict:
-        """
-        Creates a mapping from substructure hashes to feature vector indices.
-
-        Args:
-            tree_dict_list: List of dictionaries containing substructure information.
-
-        Returns:
-            Dictionary mapping substructure hashes to feature vector indices.
-        """
         index_dict = {}
         index = 0
         for tree_dict in tree_dict_list:
@@ -631,15 +398,7 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
 
     def feature_matrix(self, X: List[StructuredDict], index_dict: StructuredDict, normalize: bool) -> np.array:
         """
-        Transforms feature dictionaries to a numerical feature matrix.
-
-        Args:
-            X: List of structured dictionaries.
-            index_dict: Dictionary mapping substructure hashes to feature vector indices.
-            normalize: Boolean indicating whether to normalize the features.
-
-        Returns:
-            Feature matrix as a NumPy array.
+        Transfroms feature dicts to numerical feature matrix
         """
         feature_matrix = []
         for feature_dict in X:
@@ -650,16 +409,6 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         return np.array(feature_matrix)
 
     def feature_dict_to_feature_vector(self, feature_dict: StructuredDict, index_dict: StructuredDict):
-        """
-        Converts a feature dictionary to a feature vector.
-
-        Args:
-            feature_dict: Dictionary containing feature information.
-            index_dict: Dictionary mapping substructure hashes to feature vector indices.
-
-        Returns:
-            Feature vector as a NumPy array.
-        """
         feature_vec = np.zeros(len(index_dict))
         for key in feature_dict:
             if isinstance(feature_dict[key], list):
@@ -670,31 +419,13 @@ class OptimalTransportKernelKernel(BaseKernelGrammarKernel):
         return feature_vec
 
     def transform_X(self, X: List[BaseKernelGrammarExpression]) -> List[BaseKernelGrammarExpression]:
-        """
-        Transforms the input kernel grammar expressions to their normal form if required.
-
-        Args:
-            X: List of kernel grammar expressions.
-
-        Returns:
-            List of transformed kernel grammar expressions.
-        """
         return super().transform_X(X)
 
 
 if __name__ == "__main__":
     # kernel_kernel = StaticFeaturesKernel(1.0, FeatureType.SUBTREES, True)
     kernel_kernel = OptimalTransportKernelKernel(
-        [FeatureType.ELEMENTARY_COUNT, FeatureType.SUBTREES],
-        1.0,
-        1.0,
-        0.5,
-        False,
-        False,
-        False,
-        False,
-        (1.0, 1.0),
-        (1.0, 1.0),
+        [FeatureType.ELEMENTARY_COUNT, FeatureType.SUBTREES], 1.0, 1.0, 0.5, False, False, False, False, (1.0, 1.0), (1.0, 1.0)
     )
 
     base_expression_1 = ElementaryKernelGrammarExpression(

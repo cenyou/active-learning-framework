@@ -15,14 +15,20 @@
 import numpy as np
 from alef.oracles.base_oracle import StandardOracle
 
-
 class Griewangk(StandardOracle):
     def __init__(self, observation_noise: float, dimension: int):
-        super().__init__(observation_noise, -2.0, 2.0, dimension)
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param dimension: dimension of the input space
+        """
+        super().__init__(observation_noise, 0, 1.0, dimension)
 
     def x_scale(self, x):
+        """
+        rescale x as if we are considering input in [-10, 10]
+        """
         a, b = self.get_box_bounds()
-        return (x - a) / (b - a) * 10.0
+        return (x - a) / (b - a) * 20.0 - 10.0
 
     def f(self, x):
         sum_term = 0.0
@@ -30,8 +36,8 @@ class Griewangk(StandardOracle):
         dim = self.get_dimension()
         for i in range(dim):
             xi = self.x_scale(x[i])
-            sum_term += (xi**2) / 4000
-            product_term *= np.cos(xi / np.sqrt(i + 1))
+            sum_term += (xi ** 2) / 4000
+            product_term *= np.cos(xi / np.sqrt(i+1))
         return sum_term - product_term + 1
 
     def query(self, x, noisy=True):
@@ -41,13 +47,13 @@ class Griewangk(StandardOracle):
             function_value += epsilon
         return function_value
 
-
 if __name__ == "__main__":
+
     from matplotlib import pyplot as plt
 
     oracle = Griewangk(0.01, 2)
     X, Y = oracle.get_random_data_in_box(100, [-0.8, -0.2], 0.5, noisy=True)
-
+    
     print(X.shape)
     print(X.min(axis=0))
     print(X.max(axis=0))
@@ -55,6 +61,6 @@ if __name__ == "__main__":
 
     xs, ys = oracle.get_random_data(2000, True)
     fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
-    ax.scatter(xs[:, 0], xs[:, 1], ys, marker=".", color="black")
+    ax = fig.add_subplot(1, 1, 1, projection='3d')
+    ax.scatter(xs[:, 0], xs[:, 1], ys, marker='.', color="black")
     plt.show()

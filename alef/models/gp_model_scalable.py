@@ -14,12 +14,13 @@
 
 from typing import Callable, Optional, Tuple
 import numpy as np
+from pandas.core.base import NoNewAttributesMixin
 from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
 from alef.models.base_model import BaseModel
 from enum import Enum
 import gpflow
-from gpflow.utilities import set_trainable
+from gpflow.utilities import print_summary, set_trainable
 from tensorflow_probability import distributions as tfd
 from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.utils.utils import k_means, normal_entropy
@@ -107,28 +108,12 @@ class GPModelScalable(BaseModel):
                 inducing_locations = x_train.copy()
 
         if self.base_gp_type == BaseGPType.GPR:
-            self.model = gpflow.models.GPR(
-                data=(x_train, y_train),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.initial_observation_noise, 2.0),
-            )
+            self.model = gpflow.models.GPR(data=(x_train, y_train), kernel=self.kernel, mean_function=None, noise_variance=np.power(self.initial_observation_noise, 2.0))
         elif self.base_gp_type == BaseGPType.SGPR:
-            self.model = gpflow.models.SGPR(
-                data=(x_train, y_train),
-                kernel=self.kernel,
-                inducing_variable=inducing_locations,
-                mean_function=None,
-                noise_variance=np.power(self.initial_observation_noise, 2.0),
-            )
+            self.model = gpflow.models.SGPR(data=(x_train, y_train), kernel=self.kernel, inducing_variable=inducing_locations, mean_function=None, noise_variance=np.power(self.initial_observation_noise, 2.0))
             set_trainable(self.model.inducing_variable, False)
         elif self.base_gp_type == BaseGPType.SVGP:
-            self.model = gpflow.models.SVGP(
-                kernel=self.kernel,
-                likelihood=gpflow.likelihoods.Gaussian(variance=np.power(self.initial_observation_noise, 2.0)),
-                inducing_variable=inducing_locations,
-                num_data=n_train,
-            )
+            self.model = gpflow.models.SVGP(kernel=self.kernel, likelihood=gpflow.likelihoods.Gaussian(variance=np.power(self.initial_observation_noise, 2.0)), inducing_variable=inducing_locations, num_data=n_train)
             set_trainable(self.model.inducing_variable, False)
         if self.set_prior_on_observation_noise:
             self.model.likelihood.variance.prior = tfd.Exponential(1 / np.power(self.expected_observation_noise, 2.0))
@@ -220,9 +205,7 @@ class GPModelScalable(BaseModel):
             val_metric = np.mean(-1 * self.predictive_log_likelihood(x_val, y_val))
             return val_metric
 
-    def optimize(
-        self, x_train: np.array, y_train: np.array, x_val: Optional[np.array] = None, y_val: Optional[np.array] = None
-    ):
+    def optimize(self, x_train: np.array, y_train: np.array, x_val: Optional[np.array] = None, y_val: Optional[np.array] = None):
         print("-Start optimization")
         training_loss = self.loss(x_train, y_train)
         local_parameter_cache = GPParameterCache()
@@ -259,9 +242,7 @@ class GPModelScalable(BaseModel):
         print("-Optimization finished")
         return training_loss_final, val_metric_final
 
-    def optimize_with_mini_batch(
-        self, x_train: np.array, y_train: np.array, x_val: Optional[np.array] = None, y_val: Optional[np.array] = None
-    ):
+    def optimize_with_mini_batch(self, x_train: np.array, y_train: np.array, x_val: Optional[np.array] = None, y_val: Optional[np.array] = None):
         # @TODO Implement mini batching
         raise NotImplementedError
 
@@ -294,5 +275,5 @@ class GPModelScalable(BaseModel):
         entropies = normal_entropy(pred_sigmas)
         return entropies
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         pass

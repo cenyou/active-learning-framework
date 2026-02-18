@@ -14,7 +14,9 @@
 
 from alef.models.feature_extractors.base_feature_extractor import BaseFeatureExtractor
 import gpflow
+from typing import Tuple
 import numpy as np
+from gpflow.utilities import set_trainable
 from tensorflow_probability import distributions as tfd
 import tensorflow as tf
 from typing import List
@@ -36,9 +38,7 @@ class DenseLayer(tf.Module):
         self.b = gpflow.Parameter(tf.zeros([self.output_dim]), trainable=True)
         self.is_linear_layer = is_linear_layer
         if add_prior:
-            self.W.prior = tfd.Normal(
-                np.zeros([self.input_dim, self.output_dim]), prior_w_sigma * np.ones([self.input_dim, self.output_dim])
-            )
+            self.W.prior = tfd.Normal(np.zeros([self.input_dim, self.output_dim]), prior_w_sigma * np.ones([self.input_dim, self.output_dim]))
             self.b.prior = tfd.Normal(np.zeros([self.output_dim]), prior_b_sigma * np.ones([self.output_dim]))
 
     def set_to_linear_layer(self):
@@ -53,15 +53,7 @@ class DenseLayer(tf.Module):
 
 
 class MultiLayerPerceptron(BaseFeatureExtractor, tf.Module):
-    def __init__(
-        self,
-        input_dimension: int,
-        layer_size_list: List[int],
-        prior_w_sigma: float,
-        prior_b_sigma: float,
-        add_prior: bool,
-        **kwargs,
-    ) -> None:
+    def __init__(self, input_dimension: int, layer_size_list: List[int], prior_w_sigma: float, prior_b_sigma: float, add_prior: bool, **kwargs) -> None:
         assert len(layer_size_list) >= 1
         self.input_dimension = input_dimension
 

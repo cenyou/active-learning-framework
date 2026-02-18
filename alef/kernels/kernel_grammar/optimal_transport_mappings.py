@@ -12,13 +12,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Dict, List, Tuple
 from alef.configs.kernels.linear_configs import LinearWithPriorConfig
 from alef.configs.kernels.matern32_configs import Matern32WithPriorConfig
 from alef.configs.kernels.matern52_configs import Matern52WithPriorConfig
-from alef.configs.kernels.periodic_configs import (
-    PeriodicWithPriorConfig,
-    PeriodicWithPriorSmallerInitialPeriodicityConfig,
-)
+from alef.configs.kernels.periodic_configs import PeriodicWithPriorConfig, PeriodicWithPriorSmallerInitialPeriodicityConfig
 from alef.configs.kernels.rational_quadratic_configs import RQWithPriorConfig
 from alef.configs.kernels.rbf_configs import RBFWithPriorConfig
 from alef.kernels.kernel_grammar.kernel_grammar import (
@@ -193,22 +191,14 @@ class DimWiseWeightedDistanceExtractor:
             name_per_kernel = PeriodicWithPriorConfig(input_dimension=0).name
             self.dim_class_dict = {}
             self.dim_class_dict[0] = [name_rbf_kernel, name_per_kernel, name_linear_kernel]
-        elif (
-            generator_name == "BigNDimFullKernelsSearchSpace" or generator_name == "BigLocalNDimFullKernelsSearchSpace"
-        ):
+        elif generator_name == "BigNDimFullKernelsSearchSpace" or generator_name == "BigLocalNDimFullKernelsSearchSpace":
             name_rbf_kernel = RBFWithPriorConfig(input_dimension=0).name
             name_linear_kernel = LinearWithPriorConfig(input_dimension=0).name
             name_rq_kernel = RQWithPriorConfig(input_dimension=0).name
             name_matern52_kernel = Matern52WithPriorConfig(input_dimension=0).name
             name_matern32_kernel = Matern32WithPriorConfig(input_dimension=0).name
             self.dim_class_dict = {}
-            self.dim_class_dict[0] = [
-                name_rbf_kernel,
-                name_rq_kernel,
-                name_linear_kernel,
-                name_matern32_kernel,
-                name_matern52_kernel,
-            ]
+            self.dim_class_dict[0] = [name_rbf_kernel, name_rq_kernel, name_linear_kernel, name_matern32_kernel, name_matern52_kernel]
         elif generator_name == "DynamicHierarchicalHyperplaneKernelSpace":
             name_rbf_kernel = RBFWithPriorConfig(input_dimension=0).name
             self.dim_class_dict = {}
@@ -250,14 +240,10 @@ if __name__ == "__main__":
         RBFKernel(**RBFWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=0).dict())
     )
     base_expression_2 = ElementaryKernelGrammarExpression(
-        LinearKernel(
-            **LinearWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=1).dict()
-        )
+        LinearKernel(**LinearWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=1).dict())
     )
     base_expression_3 = ElementaryKernelGrammarExpression(
-        LinearKernel(
-            **LinearWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=0).dict()
-        )
+        LinearKernel(**LinearWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=0).dict())
     )
     base_expression_4 = ElementaryKernelGrammarExpression(
         RBFKernel(**RBFWithPriorConfig(input_dimension=3, active_on_single_dimension=True, active_dimension=1).dict())

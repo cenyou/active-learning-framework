@@ -14,23 +14,19 @@
 
 import numpy as np
 
-
 def f_s(x):
-    xx = 1.9 * x - 1
-    y = xx**3 - 1 / 2 * xx - 1
-    return np.sin(10 * y) + np.sin(xx**2) - 0.5
-
+    xx = 1.9*x - 1
+    y = xx**3 - 1/2*xx - 1
+    return np.sin(10*y) + np.sin(xx**2) - 0.5
 
 def f(x):
-    xx = 1.9 * x - 1
-    y = xx**3 - 1 / 2 * xx - 1
-    return np.sin(10 * y) + xx**2 / 3 - 0.5
+    xx = 1.9*x - 1
+    y = xx**3 - 1/2*xx - 1
+    return np.sin(10*y) + xx**2/3 - 0.5
 
-
-if __name__ == "__main__":
+if __name__=='__main__':
     from matplotlib import pyplot as plt
-
     x = np.linspace(0, 1, 50)
-    plt.plot(x, f_s(x), "-", color="y")
-    plt.plot(x, f(x), "-", color="b")
+    plt.plot(x, f_s(x), '-', color='y')
+    plt.plot(x, f(x), '-', color='b')
     plt.show()

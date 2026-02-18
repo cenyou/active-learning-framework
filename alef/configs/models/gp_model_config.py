@@ -31,10 +31,11 @@ class BasicGPModelConfig(BaseModelConfig):
     perform_multi_start_optimization: bool = True
     initial_uniform_lower_bound: float = -0.5
     initial_uniform_upper_bound: float = 0.5
-    n_starts_for_multistart_opt: int = 10
+    n_starts_for_multistart_opt: int = 5
     set_prior_on_observation_noise: bool = False
     expected_observation_noise: float = EXPECTED_OBSERVATION_NOISE
     prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y
+    classification: bool = False
     name = "GPModel"
 
 

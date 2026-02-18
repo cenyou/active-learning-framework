@@ -1,16 +1,16 @@
-# Copyright (c) 2024 Robert Bosch GmbH
+# Copyright 2018 Srikanth Gadicherla @imsrgadich
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # Source: https://github.com/imsrgadich/gprsm/blob/master/gprsm/spectralmixture.py
 
@@ -20,14 +20,13 @@ import numpy as np
 from gpflow.utilities import positive
 from gpflow.kernels import Kernel
 
-
-from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
-from alef.kernels.scale_interface import StationaryKernelGPflow
-
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
 
 gpflow.config.set_default_jitter(1e-4)
+
+from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
+from alef.kernels.scale_interface import StationaryKernelGPflow
 
 
 class SpectralMixtureKernel(Kernel, InputInitializedKernelInterface, StationaryKernelGPflow):
@@ -80,10 +79,7 @@ class SpectralMixtureKernel(Kernel, InputInitializedKernelInterface, StationaryK
         # D x 1 x 1 x num_mixtures
         r_tile = tf.tile(tf.expand_dims(r, -1), (1, 1, 1, self.num_mixtures))
         # D x N1 x N2 x num_mixtures
-        exp_term = tf.multiply(
-            tf.transpose(tf.reduce_sum(tf.square(tf.multiply(r_tile, scales_expand)), 0), perm=[2, 0, 1]),
-            -2.0 * np.pi**2,
-        )
+        exp_term = tf.multiply(tf.transpose(tf.reduce_sum(tf.square(tf.multiply(r_tile, scales_expand)), 0), perm=[2, 0, 1]), -2.0 * np.pi**2)
         # num_mixtures x N1 x N2
 
         weights = tf.expand_dims(tf.expand_dims(self.mixture_weights, -1), -1)
@@ -91,6 +87,7 @@ class SpectralMixtureKernel(Kernel, InputInitializedKernelInterface, StationaryK
         return tf.reduce_sum(tf.multiply(weights, tf.multiply(tf.exp(exp_term), tf.cos(cos_term))), 0)
 
     def K_diag(self, X):
+
         # just the sum of weights. Weights represent the signal
         # variance.
         return tf.fill(tf.stack([tf.shape(X)[0]]), tf.reduce_sum(self.mixture_weights, 0))
@@ -155,9 +152,7 @@ def sm_init(train_x, train_y, num_mixtures):
     # dim: Q x D
     # mixture_scales = tf.multiply(,tf.cast(max_dist,dtype=tf.float32)**(-1)
 
-    mixture_scales = (
-        np.multiply(np.abs(np.random.randn(num_mixtures, input_dim)), np.expand_dims(max_dist, axis=0))
-    ) ** (-1)
+    mixture_scales = (np.multiply(np.abs(np.random.randn(num_mixtures, input_dim)), np.expand_dims(max_dist, axis=0))) ** (-1)
     # Draw means from Unif(0, 0.5 / minimum distance between two points), dim: Q x D
     # the nyquist is half of maximum frequency. TODO
     nyquist = np.divide(0.5, min_dist)

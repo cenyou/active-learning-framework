@@ -13,14 +13,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from pydantic import BaseSettings
-from alef.configs.acquisition_function.bo_acquisition_functions.base_bo_acquisition_function_config import (
-    BaseBOAcquisitionFunctionConfig,
-)
-from alef.configs.acquisition_function.bo_acquisition_functions.ei_config import BasicEIConfig
-from alef.enums.bayesian_optimization_enums import (
-    AcquisitionOptimizationObjectBOType,
-    ValidationType,
-)
+from alef.configs.acquisition_functions.bo_acquisition_functions.base_bo_acquisition_function_config import BaseBOAcquisitionFunctionConfig
+from alef.configs.acquisition_functions.bo_acquisition_functions.ei_config import BasicEIConfig
+from alef.enums.bayesian_optimization_enums import AcquisitionOptimizationObjectBOType, ValidationType
 
 
 class BaseObjectBOConfig(BaseSettings):
@@ -52,7 +47,6 @@ class ObjectBOExpectedImprovementEAConfig(ObjectBOExpectedImprovementConfig):
 class ObjectBOExpectedImprovementEAFewerStepsConfig(ObjectBOExpectedImprovementEAConfig):
     n_steps_evolutionary: int = 6
     name = "ObjectBOExpectedImprovementEAFewerSteps"
-
 
 class ObjectBOExpectedImprovementEAFlatWideConfig(ObjectBOExpectedImprovementEAConfig):
     n_steps_evolutionary: int = 3

@@ -27,41 +27,40 @@ class CandidateGenerator(ABC):
     @abstractmethod
     def get_initial_candidates_trailing(self) -> List[object]:
         """
-        Initial candidate objects for the trailing optimization.
+        Initial candidate objects for the trailing optimization
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_random_canditates(self, n_candidates: int, seed=100, set_seed=False) -> List[object]:
         """
-        Retrieve n_candidates random candidates.
+        Retrieves n_candidates random candidates - is used in BayesianOptimizerOpbjects to build up the initial dataset
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_additional_candidates_trailing(self, best_current_candidate: object) -> List[object]:
         """
-        Retrieve additional candidates for the active set.
+        Retrieves additional candidates for the active set - get as argument the current best candidate object -
+        an implementation of this abstract method could than retrieve candidates close to the best one
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_initial_for_evolutionary_opt(self, n_initial):
         """
-        Retrieve initial population for EvolutionaryOptimizerObjects.
+        Retrieves intial population for EvoluationaryOptimizerObjects
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_around_candidate_for_evolutionary_opt(self, candidate: object, n_around_candidate: int):
         """
-        Retrieve candidate objects that are close to the input candidate.
+        Retrieves candidate objects that are close/related to input candidate - is used in the reproduction step
+        of EvoluationaryOptimizerObjects
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_dataset_recursivly_generated(self, n_data: int, n_per_step: int) -> List[object]:
-        """
-        Retrieve a dataset generated recursively.
-        """
         raise NotImplementedError

@@ -15,29 +15,37 @@
 import numpy as np
 from alef.oracles.base_oracle import Standard1DOracle, Standard2DOracle, StandardOracle
 
-
 class Flexible1DOracle(Standard1DOracle):
     def __init__(self, observation_noise=0.01):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+
+        to use this class, you need to set the function f
+        """
         super().__init__(observation_noise, 0.0, 1.0)
 
     def set_f(self, function):
         self.f = function
-
+    
     def query(self, x, noisy=True):
         function_value = self.f(x)
         if noisy:
             epsilon = np.random.normal(0, self.observation_noise, 1)[0]
             function_value += epsilon
         return function_value
-
 
 class Flexible2DOracle(Standard2DOracle):
     def __init__(self, observation_noise=0.01):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+
+        to use this class, you need to set the function f
+        """
         super().__init__(observation_noise, 0.0, 1.0)
 
     def set_f(self, function):
         self.f = function
-
+    
     def query(self, x, noisy=True):
         function_value = self.f(x)
         if noisy:
@@ -45,14 +53,18 @@ class Flexible2DOracle(Standard2DOracle):
             function_value += epsilon
         return function_value
 
-
 class FlexibleOracle(StandardOracle):
     def __init__(self, observation_noise=0.01):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+
+        to use this class, you need to set the function f
+        """
         super().__init__(observation_noise, 0.0, 1.0)
 
     def set_f(self, function):
         self.f = function
-
+    
     def query(self, x, noisy=True):
         function_value = self.f(x)
         if noisy:

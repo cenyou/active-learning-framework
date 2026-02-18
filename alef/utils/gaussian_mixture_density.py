@@ -111,11 +111,7 @@ class GaussianMixtureDensity:
         for i, weight in enumerate(self.weights):
             value += (
                 (weight / self.variances[i])
-                * (
-                    (x - self.mus[i]) * (self.p_diff(x) / self.p(x))
-                    + (np.power((x - self.mus[i]), 2.0) / self.variances[i])
-                    - 1
-                )
+                * ((x - self.mus[i]) * (self.p_diff(x) / self.p(x)) + (np.power((x - self.mus[i]), 2.0) / self.variances[i]) - 1)
                 * norm.pdf(x, self.mus[i], self.sigmas[i])
             )
         value = value / self.p(x)

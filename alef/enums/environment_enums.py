@@ -18,3 +18,4 @@ from enum import Enum
 class GPFramework(Enum):
     GPFLOW = 0
     GPYTORCH = 1
+

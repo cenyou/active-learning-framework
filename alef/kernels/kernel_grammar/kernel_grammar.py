@@ -12,19 +12,31 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import random
 from typing import Dict, List, Optional, Tuple, Union
 import gpflow
+from gpflow.utilities import print_summary
 from enum import Enum
 from abc import ABC, abstractmethod
 import numpy as np
+import pickle
 import logging
 from alef.configs.kernels.change_hyperplane_kernel_config import BasicCHConfig
+from alef.configs.kernels.linear_configs import LinearWithPriorConfig
+from alef.configs.kernels.periodic_configs import PeriodicWithPriorConfig
+from alef.configs.kernels.rational_quadratic_configs import BasicRQConfig
+from alef.configs.kernels.rbf_configs import BasicRBFConfig
 from copy import deepcopy
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 from alef.kernels.change_hyperplane_kernel import ChangeHyperplaneKernel
+from alef.kernels.linear_kernel import LinearKernel
+from alef.kernels.periodic_kernel import PeriodicKernel
 from alef.kernels.pytorch_kernels.elementary_kernels_pytorch import BaseElementaryKernelPytorch
+from alef.kernels.rational_quadratic_kernel import RationalQuadraticKernel
+from alef.kernels.rbf_kernel import RBFKernel
 
-logger = logging.getLogger(__name__)
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class KernelGrammarOperator(Enum):
@@ -54,21 +66,9 @@ class KernelGrammarOperatorWrapper:
         self.dimension = None
 
     def set_dimension(self, dimension: int):
-        """
-        Sets the dimension at which the operator is applied.
-
-        Args:
-            dimension (int): The dimension to set.
-        """
         self.dimension = dimension
 
     def get_dimension(self):
-        """
-        Gets the dimension at which the operator is applied.
-
-        Returns:
-            int: The dimension.
-        """
         return self.dimension
 
     def __eq__(self, operator: object) -> bool:
@@ -246,18 +246,9 @@ class SubtreeMetaInformation:
         self.upstream_operators = []
 
     def increase_depth_count(self):
-        """
-        Increases the depth counter by one.
-        """
         self.depth_counter += 1
 
     def add_upstream_operator(self, operator: KernelGrammarOperator):
-        """
-        Adds an upstream operator to the list.
-
-        Args:
-            operator (KernelGrammarOperator): The operator to add.
-        """
         self.upstream_operators.append(operator)
 
     def __str__(self):
@@ -287,12 +278,6 @@ class ElementaryPathMetaInformation:
         self.hash = hash(str(self.upstream_operator_list + [self.elementary_hash]))
 
     def generate_operator_count_dict(self):
-        """
-        Generates a dictionary counting the occurrences of each operator in the upstream operator list.
-
-        Returns:
-            dict: A dictionary with operators as keys and their counts as values.
-        """
         operator_count_dict = {}
         for operator in self.upstream_operator_list:
             if operator in operator_count_dict:
@@ -302,12 +287,6 @@ class ElementaryPathMetaInformation:
         return operator_count_dict
 
     def get_hash(self):
-        """
-        Gets the hash of the elementary path meta information.
-
-        Returns:
-            int: The hash value.
-        """
         return self.hash
 
 
@@ -440,17 +419,12 @@ class ElementaryKernelGrammarExpression(BaseKernelGrammarExpression):
 
 
 class KernelGrammarExpression(BaseKernelGrammarExpression):
-    def __init__(
-        self,
-        expression1: BaseKernelGrammarExpression,
-        expression2: BaseKernelGrammarExpression,
-        operator: KernelGrammarOperator,
-    ):
+    def __init__(self, expression1: BaseKernelGrammarExpression, expression2: BaseKernelGrammarExpression, operator: KernelGrammarOperator):
         self.expression1: BaseKernelGrammarExpression = expression1
         self.expression2: BaseKernelGrammarExpression = expression2
-        assert self.expression1.get_base_kernel_library() == self.expression2.get_base_kernel_library(), (
-            "Fusion of kernels of different base libraries not possible"
-        )
+        assert (
+            self.expression1.get_base_kernel_library() == self.expression2.get_base_kernel_library()
+        ), "Fusion of kernels of different base libraries not possible"
         self.base_kernel_library = self.expression1.get_base_kernel_library()
         self.operator: KernelGrammarOperator = operator
         self.generator_name = None
@@ -461,13 +435,9 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         elif self.operator == KernelGrammarOperator.MULTIPLY:
             return self.expression1.get_kernel() * self.expression2.get_kernel()
         elif self.operator == KernelGrammarOperator.SPLIT_CH:
-            assert self.base_kernel_library == BaseKernelsLibrary.GPFLOW, (
-                "CH operator not yet implemented for Gpytorch kernels"
-            )
+            assert self.base_kernel_library == BaseKernelsLibrary.GPFLOW, "CH operator not yet implemented for Gpytorch kernels"
             ch_kernel_config = BasicCHConfig(input_dimension=self.get_input_dimension())
-            ch_kernel = ChangeHyperplaneKernel(
-                self.expression1.get_kernel(), self.expression2.get_kernel(), **ch_kernel_config.dict()
-            )
+            ch_kernel = ChangeHyperplaneKernel(self.expression1.get_kernel(), self.expression2.get_kernel(), **ch_kernel_config.dict())
             return ch_kernel
 
     def get_operator(self) -> Optional[KernelGrammarOperator]:
@@ -476,27 +446,13 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
     def deep_copy(self):
         new_expression_1 = self.expression1.deep_copy()
         new_expression_2 = self.expression2.deep_copy()
-        new_expression = KernelGrammarExpression(
-            expression1=new_expression_1, expression2=new_expression_2, operator=self.operator
-        )
+        new_expression = KernelGrammarExpression(expression1=new_expression_1, expression2=new_expression_2, operator=self.operator)
         return new_expression
 
     def get_left_expression(self):
-        """
-        Gets the left subexpression.
-
-        Returns:
-            BaseKernelGrammarExpression: The left subexpression.
-        """
         return self.expression1
 
     def get_right_expression(self):
-        """
-        Gets the right subexpression.
-
-        Returns:
-            BaseKernelGrammarExpression: The right subexpression.
-        """
         return self.expression2
 
     def get_input_dimension(self):
@@ -560,16 +516,6 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         return reduced_list
 
     def get_expression_at_index(self, index_list: List[int]) -> BaseKernelGrammarExpression:
-        """
-        Returns subexpression at index_list where index_list has the form [0,1,1,...] specifying the way down the tree
-        0 go down expression1, 1 go down expression2. [-1] is the index_list for the expression itself
-
-        Args:
-            index_list (List[int]): The index list specifying the path to the subexpression.
-
-        Returns:
-            BaseKernelGrammarExpression: The subexpression at the specified index.
-        """
         if len(index_list) == 1:
             if index_list[0] == 0:
                 return self.expression1
@@ -587,12 +533,8 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
 
     def set_expression_at_index(self, index_list: List[int], expression: BaseKernelGrammarExpression):
         """
-        Exchanges subexpression at index_list with the expression in the argument where index_list has the form [0,1,1,...] specifying the way down the tree.
-        Changing of itself (index list [-1]) is not allowed.
-
-        Args:
-            index_list (List[int]): The index list specifying the path to the subexpression.
-            expression (BaseKernelGrammarExpression): The new subexpression to set.
+        Exchanges subexpression at index_list with the expression in the argument where index_list has the form [0,1,1,...] specifying the way down the tree
+        0 go down expression1, 1 go down expression2. Changing of itself (index list [-1]) is not allowed
         """
         if len(index_list) == 1:
             if index_list[0] == 0:
@@ -610,12 +552,6 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
                 return self.expression2.set_expression_at_index(index_list[1:], expression)
 
     def get_operator_hash(self):
-        """
-        Gets the hash value of the operator.
-
-        Returns:
-            int: The hash value of the operator.
-        """
         if self.operator == KernelGrammarOperator.ADD:
             hash_value = hash("ADD")
         elif self.operator == KernelGrammarOperator.MULTIPLY:
@@ -658,19 +594,12 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
             hash_value = hash_expr1 + hash_expr2
         elif self.operator == KernelGrammarOperator.MULTIPLY:
             hash_value = hash_expr1 * hash_expr2
-        self.count_elementary_expressions()
-        subtree_meta_info = SubtreeMetaInformation(hash_value, 0, 0)
+        num_elementary_expressions = self.count_elementary_expressions()
+        subtree_meta_info = SubtreeMetaInformation(hash_value, num_elementary_expressions, 0)
         subtree_meta_info_list = [subtree_meta_info] + meta_info_list_expr1 + meta_info_list_expr2
         return hash_value, subtree_meta_info_list
 
     def change_elementary_expression_at_index(self, index_list: List[int], new_kernel: ElementaryKernel):
-        """
-        Changes the elementary expression at the specified index with a new kernel.
-
-        Args:
-            index_list (List[int]): The index list specifying the path to the elementary expression.
-            new_kernel (ElementaryKernel): The new kernel to set.
-        """
         if len(index_list) == 1:
             if index_list[0] == 0:
                 assert isinstance(self.expression1, ElementaryKernelGrammarExpression)
@@ -687,15 +616,6 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
                 self.expression2.change_elementary_expression_at_index(index_list[1:], new_kernel)
 
     def change_random_elementary_expression(self, new_kernel: ElementaryKernel):
-        """
-        Changes a random elementary expression with a new kernel.
-
-        Args:
-            new_kernel (ElementaryKernel): The new kernel to set.
-
-        Returns:
-            float: The probability of choosing the current expression.
-        """
         probability = 1.0
         if np.random.randint(2):
             current_expression = self.expression1
@@ -714,26 +634,12 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         current_expression.set_kernel(new_kernel)
         return probability
 
-    def extend_sub_expression_at_index(
-        self, index_list: List[int], operator: KernelGrammarOperator, new_kernel: ElementaryKernel
-    ):
-        """
-        Extends the subexpression at the specified index with a new kernel and operator.
-
-        Args:
-            index_list (List[int]): The index list specifying the path to the subexpression.
-            operator (KernelGrammarOperator): The operator to use for extension.
-            new_kernel (ElementaryKernel): The new kernel to extend with.
-        """
+    def extend_sub_expression_at_index(self, index_list: List[int], operator: KernelGrammarOperator, new_kernel: ElementaryKernel):
         if len(index_list) == 1:
             if index_list[0] == 0:
-                self.expression1 = KernelGrammarExpression(
-                    self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator
-                )
+                self.expression1 = KernelGrammarExpression(self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator)
             elif index_list[0] == 1:
-                self.expression2 = KernelGrammarExpression(
-                    self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator
-                )
+                self.expression2 = KernelGrammarExpression(self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator)
             elif index_list[0] == -1:
                 self.expression1 = self.deep_copy()
                 self.expression2 = ElementaryKernelGrammarExpression(new_kernel)
@@ -753,15 +659,6 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         skip_operator=False,
         operator_to_skip=KernelGrammarOperator.SPLIT_CH,
     ):
-        """
-        Extends a random subexpression with a new kernel and operator.
-
-        Args:
-            operator (KernelGrammarOperator): The operator to use for extension.
-            new_kernel (ElementaryKernel): The new kernel to extend with.
-            skip_operator (bool, optional): Whether to skip certain operators. Defaults to False.
-            operator_to_skip (KernelGrammarOperator, optional): The operator to skip. Defaults to KernelGrammarOperator.SPLIT_CH.
-        """
         choose_first = np.random.randint(2)
         if choose_first:
             chosen_sub_expression = self.expression1
@@ -780,23 +677,12 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
             chosen_sub_expression.extend_random_sub_expression(operator, new_kernel)
         else:
             if choose_first:
-                self.expression1 = KernelGrammarExpression(
-                    self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator
-                )
+                self.expression1 = KernelGrammarExpression(self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator)
             else:
-                self.expression2 = KernelGrammarExpression(
-                    self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator
-                )
+                self.expression2 = KernelGrammarExpression(self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator)
             return
 
     def extend_top_level_operator(self, operator: KernelGrammarOperator, new_kernel: ElementaryKernel):
-        """
-        Extends the top-level operator with a new kernel and operator.
-
-        Args:
-            operator (KernelGrammarOperator): The operator to use for extension.
-            new_kernel (ElementaryKernel): The new kernel to extend with.
-        """
         if self.operator == operator:
             choose_first = np.random.randint(2)
             if choose_first:
@@ -816,13 +702,9 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
                 chosen_sub_expression.extend_top_level_operator(operator, new_kernel)
             else:
                 if choose_first:
-                    self.expression1 = KernelGrammarExpression(
-                        self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator
-                    )
+                    self.expression1 = KernelGrammarExpression(self.expression1, ElementaryKernelGrammarExpression(new_kernel), operator)
                 else:
-                    self.expression2 = KernelGrammarExpression(
-                        self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator
-                    )
+                    self.expression2 = KernelGrammarExpression(self.expression2, ElementaryKernelGrammarExpression(new_kernel), operator)
                 return
         else:
             self.expression1 = KernelGrammarExpression(self.expression1, self.expression2, self.operator)
@@ -865,15 +747,6 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         return subtree_dict
 
     def get_paths_to_elementaries(self, use_name_as_key=False):
-        """
-        Gets the paths to elementary expressions.
-
-        Args:
-            use_name_as_key (bool, optional): Whether to use the name as the key. Defaults to False.
-
-        Returns:
-            dict: A dictionary with paths to elementary expressions.
-        """
         _, subtree_meta_info_list = self.get_hash()
         paths = {}
         for subtree_meta_info in subtree_meta_info_list:
@@ -895,22 +768,10 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
         for elementary_hash in full_paths:
             reduced_paths[elementary_hash] = []
             for upstream_operator_list in full_paths[elementary_hash]:
-                reduced_paths[elementary_hash].append(
-                    self.reduce_operator_list(upstream_operator_list, operators_to_reduce)
-                )
+                reduced_paths[elementary_hash].append(self.reduce_operator_list(upstream_operator_list, operators_to_reduce))
         return reduced_paths
 
     def reduce_operator_list(self, operator_list, operators_to_reduce):
-        """
-        Reduces the operator list by removing consecutive duplicate operators.
-
-        Args:
-            operator_list (list): The list of operators.
-            operators_to_reduce (list): The list of operators to reduce.
-
-        Returns:
-            list: The reduced list of operators.
-        """
         reduced_list = []
         previous_operator = None
         for operator in operator_list:
@@ -981,24 +842,16 @@ class KernelGrammarExpression(BaseKernelGrammarExpression):
                 expression_right = self.get_right_expression()
                 left_expression_left = self.get_left_expression().get_left_expression()
                 left_expression_right = self.get_left_expression().get_right_expression()
-                self.expression1 = KernelGrammarExpression(
-                    left_expression_left, expression_right, KernelGrammarOperator.MULTIPLY
-                )
-                self.expression2 = KernelGrammarExpression(
-                    left_expression_right, expression_right, KernelGrammarOperator.MULTIPLY
-                )
+                self.expression1 = KernelGrammarExpression(left_expression_left, expression_right, KernelGrammarOperator.MULTIPLY)
+                self.expression2 = KernelGrammarExpression(left_expression_right, expression_right, KernelGrammarOperator.MULTIPLY)
                 return True
             elif self.get_right_expression().get_operator() == KernelGrammarOperator.ADD:
                 self.operator = KernelGrammarOperator.ADD
                 expression_left = self.get_left_expression()
                 right_expression_left = self.get_right_expression().get_left_expression()
                 right_expression_right = self.get_right_expression().get_right_expression()
-                self.expression1 = KernelGrammarExpression(
-                    right_expression_left, expression_left, KernelGrammarOperator.MULTIPLY
-                )
-                self.expression2 = KernelGrammarExpression(
-                    right_expression_right, expression_left, KernelGrammarOperator.MULTIPLY
-                )
+                self.expression1 = KernelGrammarExpression(right_expression_left, expression_left, KernelGrammarOperator.MULTIPLY)
+                self.expression2 = KernelGrammarExpression(right_expression_right, expression_left, KernelGrammarOperator.MULTIPLY)
                 return True
 
         pushed_down1 = self.expression1.push_down_one_mult()
@@ -1026,17 +879,13 @@ class KernelGrammarExpressionTransformer:
         return new_expression
 
     @staticmethod
-    def multiply_expressions(
-        expression_list: List[BaseKernelGrammarExpression], make_deep_copy=True
-    ) -> BaseKernelGrammarExpression:
+    def multiply_expressions(expression_list: List[BaseKernelGrammarExpression], make_deep_copy=True) -> BaseKernelGrammarExpression:
         return KernelGrammarExpressionTransformer.combine_all_expressions_via_operator(
             KernelGrammarOperator.MULTIPLY, expression_list, make_deep_copy
         )
 
     @staticmethod
-    def add_expressions(
-        expression_list: List[BaseKernelGrammarExpression], make_deep_copy=True
-    ) -> BaseKernelGrammarExpression:
+    def add_expressions(expression_list: List[BaseKernelGrammarExpression], make_deep_copy=True) -> BaseKernelGrammarExpression:
         return KernelGrammarExpressionTransformer.combine_all_expressions_via_operator(
             KernelGrammarOperator.ADD, expression_list, make_deep_copy
         )

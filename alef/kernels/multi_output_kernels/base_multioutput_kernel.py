@@ -13,10 +13,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import gpflow
+import numpy as np
 import tensorflow as tf
 from typing import Dict
 from .latent_kernel_enum import LatentKernel
-
 
 class BaseMultioutputKernel(gpflow.kernels.MultioutputKernel):
     def __init__(
@@ -83,26 +83,29 @@ class BaseMultioutputKernel(gpflow.kernels.MultioutputKernel):
 
     def get_input_dimension(self):
         return self.input_dimension
-
+    
     def get_output_dimension(self):
         return self.output_dimension
-
+    
     def assign_parameters(self, parameter_values: Dict):
         def get_attribute(class_obj, name):
-            if "[" in name:
-                key, idx = name.split("]")[0].split("[")
+            if '[' in name:
+                key, idx = name.split(']')[0].split('[')
                 return getattr(class_obj, key)[int(idx)]
             else:
                 return getattr(class_obj, name)
-
+        
         for key, values in parameter_values.items():
             target = self.kernel
-            if "." in key:
-                for name in key.split("."):
+            if '.' in key:
+                for name in key.split('.'):
                     target = get_attribute(target, name)
             else:
                 target = get_attribute(target, key)
-            target.assign(values)
+            try:
+                target.assign(values)
+            except:
+                assert False, (key, target, values)
 
     def pick_kernel_object(self, latent_kernel: LatentKernel):
         if latent_kernel == LatentKernel.RBF:
@@ -115,3 +118,4 @@ class BaseMultioutputKernel(gpflow.kernels.MultioutputKernel):
             return gpflow.kernels.Matern52
         else:
             raise NotImplementedError
+

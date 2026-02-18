@@ -18,10 +18,10 @@ import tensorflow as tf
 from gpflow.config import default_float
 from gpflow.mean_functions import Constant, MeanFunction
 import gpflow
-from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, ElementaryKernelGrammarExpression
 
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
+from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, ElementaryKernelGrammarExpression
 
 
 class Zero(Constant):
@@ -54,10 +54,8 @@ class BICMean(MeanFunction):
         self.c = gpflow.Parameter(f64(base_c), trainable=trainable)
 
     def __call__(self, X: List[BaseKernelGrammarExpression]):
-        n_params = [
-            tf.add_n([tf.size(tensor) for tensor in kernel_grammar_expression.get_kernel().trainable_variables])
-            for kernel_grammar_expression in X
-        ]
+
+        n_params = [tf.add_n([tf.size(tensor) for tensor in kernel_grammar_expression.get_kernel().trainable_variables]) for kernel_grammar_expression in X]
 
         n_params_tf = tf.expand_dims(tf.convert_to_tensor(n_params, dtype=default_float()), axis=1)
         if self.divide_with_n_data:

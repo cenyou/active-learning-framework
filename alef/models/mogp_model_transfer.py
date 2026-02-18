@@ -16,22 +16,25 @@ from enum import Enum
 import numpy as np
 import time
 import traceback
-from typing import Tuple, Optional
+from typing import Union, Sequence, List, Tuple, Optional
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 import gpflow
 from gpflow.utilities import print_summary, set_trainable
+from gpflow.kernels import Kernel, MultioutputKernel
 from scipy.stats import norm
 
+from alef.utils.utils import normal_entropy
 from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.models.base_model import BaseModel
-from alef.models.mo_gpr_transfer import TransferGPR
+from alef.models.mo_gpr_transfer import TransferGPR, TransferGPC_Binary
 from alef.kernels.multi_output_kernels.base_transfer_kernel import BaseTransferKernel
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
-from alef.enums.global_model_enums import PredictionQuantity, InitialParameters
+from alef.enums.global_model_enums import InitializationType, PredictionQuantity, InitialParameters
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class SourceTraining(Enum):
@@ -70,15 +73,17 @@ class TransferGPModel(BaseModel):
         n_starts_for_multistart_opt: int = 5,
         set_prior_on_observation_noise=False,
         prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_F,
-        **kwargs,
+        classification: bool = False,
+        **kwargs
     ):
         self.kernel = kernel
         self.kernel_copy = gpflow.utilities.deepcopy(kernel)
         self.source_trained = False
         self.source_data = None
         self.kernel_on_source = None
-        self.likelihood_vars_on_source = None
+        self.likelihood_vars_trained_on_source = None
         self.cholesky_on_source = None
+        self.variation_parameters_on_source = None # used only for classification
         self.observation_noise = observation_noise
         self.expected_observation_noise = expected_observation_noise
         self.model = None
@@ -86,10 +91,12 @@ class TransferGPModel(BaseModel):
         self.train_likelihood_variance = train_likelihood_variance
         self.source_training_mode = source_training_mode
         self.use_mean_function = False
+        self.last_opt_time = 0
+        self.last_multi_start_opt_time = 0
         self.sample_initial_parameters_at_start = sample_initial_parameters_at_start
         self.initial_parameter_strategy = initial_parameter_strategy
         self.perform_multi_start_optimization = perform_multi_start_optimization
-
+        
         if self.perform_multi_start_optimization:
             self.perturbation_factor = perturbation_for_multistart_opt
         else:
@@ -98,6 +105,7 @@ class TransferGPModel(BaseModel):
         self.n_starts_for_multistart_opt = n_starts_for_multistart_opt
         self.set_prior_on_observation_noise = set_prior_on_observation_noise
         self.prediction_quantity = prediction_quantity
+        self.classification = classification
         self.print_summaries = False
         if isinstance(kernel, RegularizedKernelInterface):
             self.add_kernel_hp_regularizer = True
@@ -105,21 +113,24 @@ class TransferGPModel(BaseModel):
             self.add_kernel_hp_regularizer = False
 
     def assign_likelihood_variance(self):
+        assert not self.classification
         new_value = np.power(self.observation_noise, 2.0)
         t = self.kernel.output_dimension
-        if hasattr(new_value, "__len__"):
+        if hasattr(new_value, '__len__'):
             assert len(new_value) == t
             if self.source_trained:
-                new_value[:-1] = np.array(self.likelihood_vars_on_source[:-1])
+                new_value[:-1] = np.array(self.likelihood_vars_trained_on_source[:-1])
         else:
             new_value = new_value * np.ones(t, dtype=float)
             if self.source_trained:
-                new_value[:-1] = np.array(self.likelihood_vars_on_source[:-1])
-
-        for i, lik in enumerate(self.model.likelihood.likelihoods):
+                new_value[:-1] = np.array(self.likelihood_vars_trained_on_source[:-1])
+        
+        for i in range(self.kernel.output_dimension):
+            lik = self.model.likelihood.likelihoods[i]
             lik.variance.assign(new_value[i])
 
-    def reset_model(self, reset_source: bool = False):
+
+    def reset_model(self, reset_source: bool=False):
         """
         resets the model to the initial values - kernel parameters and observation noise are reset to initial values - gpflow model is deleted
         """
@@ -153,60 +164,91 @@ class TransferGPModel(BaseModel):
         """
         self.n_starts_for_multistart_opt = n_starts
 
-    def build_model(self, x_data: np.array, y_data: np.array):
+    def set_model_data(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
+        assert hasattr(self, 'model')
+        assert isinstance(self.model, (TransferGPR, TransferGPC_Binary))
         yy = np.hstack((y_data[..., :1], x_data[..., -1, None]))
         t = self.kernel.output_dimension - 1
-        t_mask = x_data[:, -1] == t
-        np.power(self.observation_noise, 2.0)
-        model = TransferGPR
+        t_mask = x_data[:,-1] == t
+        if self.classification:
+            class_mask = np.zeros_like(y_data, dtype=bool)[..., 0] if class_mask is None else class_mask
+            yy[class_mask, -1] = t+1
+        self.model.source_data = gpflow.models.util.data_input_to_tensor((x_data[~t_mask], yy[~t_mask]))
+        self.model.data = gpflow.models.util.data_input_to_tensor((x_data[t_mask], yy[t_mask]))
+
+    def build_model(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
+        """
+        x_data: [N, D]
+        
+        y_data: [N, 1]
+        
+        class_mask [N] bool array, y_data[class_mask] is class label while y_data[~class_mask] is regression observation
+        
+        """
+        yy = np.hstack((y_data[..., :1], x_data[..., -1, None]))
+        t = self.kernel.output_dimension - 1
+        t_mask = x_data[:,-1] == t
+        
+        if not self.classification:
+            model = TransferGPR
+        else:
+            class_mask = np.zeros_like(y_data, dtype=bool)[..., 0] if class_mask is None else class_mask
+            yy[class_mask, -1] = t+1
+            model = TransferGPC_Binary
+
         if self.use_mean_function:
-            self.model = model(
-                source_data=(x_data[~t_mask], yy[~t_mask]),
-                data=(x_data[t_mask], yy[t_mask]),
-                kernel=self.kernel,
-                mean_function=self.mean_function,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
+            self.model = model(source_data=(x_data[~t_mask], yy[~t_mask]), data=(x_data[t_mask], yy[t_mask]), kernel=self.kernel, mean_function=self.mean_function, noise_variance=np.power(self.observation_noise, 2.0))
             set_trainable(self.model.mean_function.c, False)
         else:
-            self.model = model(
-                source_data=(x_data[~t_mask], yy[~t_mask]),
-                data=(x_data[t_mask], yy[t_mask]),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
+            self.model = model(source_data=(x_data[~t_mask], yy[~t_mask]), data=(x_data[t_mask], yy[t_mask]), kernel=self.kernel, mean_function=None, noise_variance=np.power(self.observation_noise, 2.0))
 
         if self.set_prior_on_observation_noise:
-            for lik in self.model.likelihood.likelihoods:
+            for i in range(self.kernel.output_dimension):
+                lik = self.model.likelihood.likelihoods[i]
                 lik.variance.prior = tfd.Exponential(1 / np.power(self.expected_observation_noise, 2.0))
 
     def _set_source(self):
         t = self.kernel.output_dimension - 1
-
+        
         self.model.kernel = gpflow.utilities.deepcopy(self.kernel_on_source)
         self.model.source_data = self.source_data
 
-        for p, lik in enumerate(self.model.likelihood.likelihoods):
-            if p == t:
+        for p in range(self.kernel.output_dimension):
+            lik = self.model.likelihood.likelihoods[p]
+            if p==t:
                 set_trainable(lik.variance, self.train_likelihood_variance)
             else:
-                lik.variance.assign(self.likelihood_vars_on_source[p])
+                lik.variance.assign(self.likelihood_vars_trained_on_source[p])
                 set_trainable(lik.variance, False)
-        self.likelihood_vars_on_source = [lik.variance.numpy() for lik in self.model.likelihood.likelihoods]
-        self.model.set_source_cholesky(self.cholesky_on_source)
+        self.likelihood_vars_trained_on_source = [self.model.likelihood.likelihoods[p].variance.numpy() for p in range(self.kernel.output_dimension)]
+        if self.classification:
+            qs_mu, qs_sqrt = self.variation_parameters_on_source
+            self.model.q_source_mu.assign(qs_mu)
+            self.model.q_source_sqrt.assign(qs_sqrt)
+            set_trainable(self.model.q_source_mu, False)
+            set_trainable(self.model.q_source_sqrt, False)
 
+        self.model.set_source_cholesky(self.cholesky_on_source)
+    
     def _infer_and_set_source(self):
         T = self.model.kernel.output_dimension - 1
 
         if self.optimize_hps:
             # set trainable
-            for p, lik in enumerate(self.model.likelihood.likelihoods):
-                if p == T and self.source_training_mode == SourceTraining.WITHOUT_TARGET:
+            for p in range(self.kernel.output_dimension):
+                lik = self.model.likelihood.likelihoods[p]
+                if p==T and self.source_training_mode==SourceTraining.WITHOUT_TARGET:
                     set_trainable(lik.variance, False)
                 else:
                     set_trainable(lik.variance, self.train_likelihood_variance)
-            if self.source_training_mode == SourceTraining.WITHOUT_TARGET:
+            if self.classification:
+                if self.source_training_mode==SourceTraining.WITHOUT_TARGET:
+                    if self.model.num_data > 0: # non empty target data
+                        set_trainable(self.model.q_mu, False)
+                        set_trainable(self.model.q_cross_sqrt, False)
+                        set_trainable(self.model.q_sqrt, False)
+
+            if self.source_training_mode==SourceTraining.WITHOUT_TARGET:
                 target_trainable = self.model.kernel.get_target_parameters_trainable()
                 self.model.kernel.set_target_parameters_trainable(False)
 
@@ -218,31 +260,41 @@ class TransferGPModel(BaseModel):
 
             # set trainable
             self.model.kernel.set_source_parameters_trainable(False)
-            if self.source_training_mode == SourceTraining.WITHOUT_TARGET:
+            if self.source_training_mode==SourceTraining.WITHOUT_TARGET:
                 self.model.kernel.set_target_parameters_trainable(target_trainable)
-            for p, lik in enumerate(self.model.likelihood.likelihoods):
-                if p == T:
+            for p in range(self.kernel.output_dimension):
+                lik = self.model.likelihood.likelihoods[p]
+                if p==T:
                     set_trainable(lik.variance, self.train_likelihood_variance)
                 else:
                     set_trainable(lik.variance, False)
+            if self.classification:
+                set_trainable(self.model.q_source_mu, False)
+                set_trainable(self.model.q_source_sqrt, False)
+                if self.model.num_data > 0:
+                    set_trainable(self.model.q_mu, True)
+                    set_trainable(self.model.q_cross_sqrt, True)
+                    set_trainable(self.model.q_sqrt, True)
 
-            self.source_trained = True
-            self.source_data = self.model.source_data
-            self.kernel_on_source = gpflow.utilities.deepcopy(self.model.kernel)
-            self.likelihood_vars_on_source = [lik.variance.numpy() for lik in self.model.likelihood.likelihoods]
-            self.cholesky_on_source = self.model.compute_source_cholesky()
+        self.source_trained = True
+        self.source_data = self.model.source_data
+        self.kernel_on_source = gpflow.utilities.deepcopy(self.model.kernel)
+        self.likelihood_vars_trained_on_source = [self.model.likelihood.likelihoods[p].variance.numpy() for p in range(self.kernel.output_dimension)]
+        if self.classification:
+            self.variation_parameters_on_source = (self.model.q_source_mu.numpy(), self.model.q_source_sqrt.numpy())
+        self.cholesky_on_source = self.model.compute_source_cholesky()
+        self.model.set_source_cholesky(self.cholesky_on_source)
 
-            self.model.set_source_cholesky(self.cholesky_on_source)
-
-    def infer(self, x_data: np.array, y_data: np.array):
+    def infer(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
         """
         Main entrance method for learning the model - training methods are called if hp should be done otherwise only gpflow model is build
 
         Arguments:
             x_data: Input array with shape (n,d+1) where d is the input dimension and n the number of training points
             y_data: Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
         """
-        self.build_model(x_data, y_data)
+        self.build_model(x_data, y_data, class_mask)
         if self.source_trained:
             self._set_source()
             t_opt_source = 0
@@ -254,9 +306,9 @@ class TransferGPModel(BaseModel):
             if self.perform_multi_start_optimization:
                 t_opt_multi_start_source = self.get_last_multistart_opt_time()
         if tf.shape(self.model.data[0])[0] == 0:
-            print("no target data")
+            print('no target data')
             return
-
+        
         if self.optimize_hps:
             if self.perform_multi_start_optimization:
                 self.multi_start_optimization(self.n_starts_for_multistart_opt)
@@ -281,7 +333,7 @@ class TransferGPModel(BaseModel):
 
         optimizer = gpflow.optimizers.Scipy()
         optimization_success = False
-        while not optimization_success:
+        while not optimization_success and len(self.model.trainable_variables) > 0:
             try:
                 time_before_opt = time.perf_counter()
                 opt_res = optimizer.minimize(self.model.training_loss, self.model.trainable_variables)
@@ -319,7 +371,7 @@ class TransferGPModel(BaseModel):
             return self.model.training_loss() + self.model.kernel.regularization_loss(self.model.data[0])
         else:
             return self.model.training_loss()
-
+    
     def print_model_summary(self):
         if logger.isEnabledFor(logging.DEBUG):
             print_summary(self.model)
@@ -351,7 +403,7 @@ class TransferGPModel(BaseModel):
                 opt_time = 0.0
                 self.multi_start_losses = []
                 for i in range(0, n_starts):
-                    logger.info(f"Optimization repeat {i + 1}/{n_starts}")
+                    logger.debug(f"Optimization repeat {i+1}/{n_starts}")
                     self.optimize()
                     after_optim = time.perf_counter()
                     loss = self.training_loss()
@@ -360,10 +412,10 @@ class TransferGPModel(BaseModel):
                     after_loss_calc = time.perf_counter()
                     opt_time += self.get_last_opt_time() + (after_loss_calc - after_optim)
                     if self.add_kernel_hp_regularizer:
-                        logger.info(f"Loss for run: {loss}")
+                        logger.debug(f"Loss for run: {loss}")
                     else:
                         log_marginal_likelihood = -1 * loss
-                        logger.info(f"Log marginal likeli for run: {log_marginal_likelihood}")
+                        logger.debug(f"Log marginal likeli for run: {log_marginal_likelihood}")
                 self.parameter_cache.load_best_parameters_to_model(self.model)
                 self.last_multi_start_opt_time = opt_time
                 logger.debug("Chosen parameter values:")
@@ -378,21 +430,24 @@ class TransferGPModel(BaseModel):
             except:
                 logger.error("Error in multistart optimization - repeat")
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None, class_mask: Optional[np.array] = None) -> float:
         """
         Estimates the model evidence - always retrieves marg likelihood, also when HPs are provided with prior!!
 
         Arguments:
             x_data: (only necessary if infer was not yet called) Input array with shape (n,d) where d is the input dimension and n the number of training points
             y_data: (only necessary if infer was not yet called) Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
 
         Returns:
             marginal likelihood value of infered model
         """
         if self.model is None and x_data is not None and y_data is not None:
-            self.infer(x_data, y_data)
-        model_evidence = self.model.log_marginal_likelihood().numpy()
-        return model_evidence
+            self.infer(x_data, y_data, class_mask)
+        if isinstance(self.model, TransferGPR):
+            return self.model.log_marginal_likelihood().numpy()
+        else: #TransferGPC_Binary
+            return self.model.elbo().numpy()
 
     def pertube_parameters(self, factor_bound: float):
         """
@@ -408,21 +463,20 @@ class TransferGPModel(BaseModel):
             if self.train_likelihood_variance:
                 obs_vars = np.power(self.observation_noise, 2.0)
                 t = self.kernel.output_dimension
-                if hasattr(obs_vars, "__len__"):
+                if hasattr(obs_vars, '__len__'):
                     assert len(obs_vars) == t
                 else:
                     obs_vars = obs_vars * np.ones(t, dtype=float)
-
-                for i, lik in enumerate(self.model.likelihood.likelihoods):
+                
+                for i in range(self.kernel.output_dimension):
+                    lik = self.model.likelihood.likelihoods[i]
                     lik.variance.assign(obs_vars[i])
-
+        
         for variable in self.model.trainable_variables:
             unconstrained_value = variable.numpy()
             factor = 1 + np.random.uniform(-1 * factor_bound, factor_bound, size=unconstrained_value.shape)
             if np.isclose(unconstrained_value, 0.0, rtol=1e-07, atol=1e-09).all():
-                new_unconstrained_value = (
-                    unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)
-                ) * factor
+                new_unconstrained_value = (unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)) * factor
             else:
                 new_unconstrained_value = unconstrained_value * factor
             variable.assign(new_unconstrained_value)
@@ -435,9 +489,7 @@ class TransferGPModel(BaseModel):
             elif parameter.name == "softplus":
                 sample = tfd.Uniform(low=1e-9, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             else:
-                sample = tfd.Uniform(
-                    low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound
-                ).sample(sample_shape=shape)
+                sample = tfd.Uniform(low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             parameter.assign(sample.numpy())
 
     def predictive_dist(self, x_test: np.array) -> Tuple[np.array, np.array]:
@@ -476,7 +528,7 @@ class TransferGPModel(BaseModel):
 
         return entropy
 
-    def calculate_complete_information_gain(self, x_data: np.array) -> np.float:
+    def calculate_complete_information_gain(self, x_data: np.array) -> float:
         raise NotImplementedError
 
     def predictive_log_likelihood(self, x_test: np.array, y_test: np.array) -> np.array:
@@ -495,3 +547,51 @@ class TransferGPModel(BaseModel):
         pred_sigmas = np.sqrt(pred_vars)
         log_likelis = norm.logpdf(np.squeeze(y_test), np.squeeze(pred_mus), np.squeeze(pred_sigmas))
         return log_likelis
+
+
+if __name__ == '__main__':
+    from alef.kernels.multi_output_kernels.coregionalization_transfer_kernel import CoregionalizationTransferKernel
+    from alef.experiments.safe_learning.simulator import PoolHandler
+    from alef.enums.global_model_enums import PredictionQuantity
+
+    pool = PoolHandler().get_transfer_pool_from_oracle(3000, oracle_type='illustrate', observation_noise=0.1, additional_safety=False)
+
+    k = CoregionalizationTransferKernel(
+        base_variance = 1.0,
+        base_lengthscale=1.0,
+        input_dimension=1,
+        output_dimension=2,
+        add_prior=False,
+        lengthscale_prior_parameters=(1, 9),
+        variance_prior_parameters=(1, 0.3),
+        active_on_single_dimension=False,
+        active_dimension=None,
+        name='test'
+    )
+    model = TransferGPModel(
+        k, 0.1, 0.1,
+        optimize_hps=True,
+        train_likelihood_variance=True,
+        perform_multi_start_optimization=True,
+        prediction_quantity= PredictionQuantity.PREDICT_Y
+    )
+
+    for i in range(100):
+        print(f'iter {i}')
+        pool.set_task_mode(learning_target=False)
+        Xs, Ys = pool.get_random_constrained_data(50, constraint_lower=0.0)
+        pool.set_task_mode(learning_target=True)
+        Xt, Yt = pool.get_random_constrained_data_in_box(5, -1, 0.5, constraint_lower=0.0)
+
+        X = np.vstack(( Xs, Xt ))
+        Y = np.vstack(( Ys, Yt ))
+        print('   train source')
+        model.infer(Xs, Ys)
+        print('   predict')
+        _, _=model.predictive_dist(Xt)
+
+        model.reset_model()
+        print('   train target')
+        model.infer(X, Y)
+        print('   predict')
+        _, _=model.predictive_dist(Xt)

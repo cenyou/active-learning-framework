@@ -12,113 +12,124 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
-from typing import Union, Sequence
+from typing import Union, Sequence, Optional
 import numpy as np
+from alef.utils.plotter import Plotter
 from alef.utils.utils import row_wise_compare, row_wise_unique
-from alef.oracles.base_oracle import BaseOracle
+from alef.oracles.base_oracle import BaseOracle, StandardOracle
+from alef.oracles.helpers.constrained_sampler import ConstrainedSampler
 from alef.pools.base_pool import BasePool
+import matplotlib.pyplot as plt
 
 
 class PoolFromOracle(BasePool):
-    def __init__(self, oracle: BaseOracle, seed: int = 123, set_seed: bool = False):
+    def __init__(
+        self,
+        oracle: StandardOracle,
+        seed: int=123,
+        set_seed: bool=False
+    ):
+        assert isinstance(oracle, StandardOracle), NotImplementedError
         super().__init__()
         self.oracle = oracle
         self.__x = None
+        self.__ConstrainedHelper = ConstrainedSampler()
         if set_seed:
             np.random.seed(seed)
-
+    
     def get_max(self):
-        if hasattr(self.oracle, "get_max"):
+        if hasattr(self.oracle, 'get_max'):
             return self.oracle.get_max()
         else:
             D = self.get_dimension()
-            if D > 3:
-                print(f"dimension is {D}, this might take a while")
+            if D>3:
+                print(f'dimension is {D}, this might take a while')
             X, Y = self.get_random_data(int(100**D), noisy=False)
             return max(Y)
-
-    def get_constrained_max(self, constraint_lower: float = -np.inf, constraint_upper: float = np.inf):
+    
+    def get_constrained_max(
+        self, 
+        constraint_lower: float =-np.inf,
+        constraint_upper: float = np.inf
+        ):
+        
         max_unconst = self.get_max()
         assert max_unconst >= constraint_lower
         return min(max_unconst, constraint_upper)
 
-    def query(self, x, noisy: bool):
+    def query(self, x, noisy: bool=True):
         if np.shape(np.atleast_2d(x))[0] > 1:
             raise ValueError("please query only 1 point")
-
+        
         idx = row_wise_compare(self.__x, x)
         idx = np.where(idx)[0]
-        if len(idx) < 1 and not self._query_non_exist_points:
-            raise ValueError("queried point does not exist")
-
+        if len(idx) < 1 and not self.get_query_non_exist():
+            raise ValueError('queried point does not exist')
+        
         y = self.oracle.query(x, noisy)
 
         if not self._with_replacement:
-            self.__x = np.delete(self.__x, (idx), axis=0)
-
+            self.__x = np.delete(self.__x,(idx),axis=0)
+        
         return y
-
+    
     def get_grid_data(self, *args, **kwargs):
         """
         input: n_per_dim noisy
         """
-        if hasattr(self.oracle, "get_grid_data"):
+        if hasattr(self.oracle, 'get_grid_data'):
             return self.oracle.get_grid_data(*args, **kwargs)
         else:
-            raise NotImplementedError(f"{self.oracle.__class__.__name__} does not have 'get_grid_data' method")
-
-    def load_grid_data(self, folder: str):
-        X_path = os.path.join(folder, "X_grid.txt")
-        Y_path = os.path.join(folder, "Y_grid.txt")
-        return self.load_data(X_path, Y_path)
+            raise NotImplementedError(f'{self.oracle.__class__.__name__} does not have \'get_grid_data\' method')
 
     def get_random_data(self, *args, **kwargs):
         """
         input: n, noisy
         """
         return self.oracle.get_random_data(*args, **kwargs)
-
+    
     def get_random_data_in_box(
-        self, n: int, a: Union[float, Sequence[float]], box_width: Union[float, Sequence[float]], noisy: bool = True
+        self, n: int,
+        a: Union[float, Sequence[float]],
+        box_width: Union[float, Sequence[float]],
+        noisy:bool=True
     ):
         return self.oracle.get_random_data_in_box(n, a, box_width, noisy)
 
     def get_random_constrained_data(
-        self, n: int, noisy: bool = True, constraint_lower: float = -np.inf, constraint_upper: float = np.inf
+        self, n : int,
+        noisy : bool=True,
+        constraint_lower: float =-np.inf,
+        constraint_upper: float = np.inf
     ):
-        n_constr = 0
-        X, Y = None, None
-
-        while n_constr < n:
-            X_rd, Y_rd = self.get_random_data(n, noisy=noisy)
-            X, Y = self._constrain_data(X, Y, X_rd, Y_rd, n, constraint_lower, constraint_upper)
-            n_constr = X.shape[0]
-
-        return X, Y
+        return self.__ConstrainedHelper.get_random_constrained_data(
+            self.oracle,
+            n,
+            noisy,
+            constraint_lower=constraint_lower,
+            constraint_upper=constraint_upper
+        )
 
     def get_random_constrained_data_in_box(
-        self,
-        n: int,
+        self, n: int,
         a: Union[float, Sequence[float]],
         box_width: Union[float, Sequence[float]],
-        noisy: bool = True,
-        constraint_lower: float = -np.inf,
-        constraint_upper: float = np.inf,
+        noisy : bool=True,
+        constraint_lower: float =-np.inf,
+        constraint_upper: float = np.inf
     ):
-        n_constr = 0
-        X, Y = None, None
-
-        while n_constr < n:
-            X_rd, Y_rd = self.get_random_data_in_box(n, a, box_width, noisy=noisy)
-            X, Y = self._constrain_data(X, Y, X_rd, Y_rd, n, constraint_lower, constraint_upper)
-            n_constr = X.shape[0]
-
-        return X, Y
+        return self.__ConstrainedHelper.get_random_constrained_data_in_box(
+            self.oracle,
+            n,
+            a,
+            box_width,
+            noisy,
+            constraint_lower=constraint_lower,
+            constraint_upper=constraint_upper
+        )
 
     def get_box_bounds(self, *args, **kwargs):
         return self.oracle.get_box_bounds(*args, **kwargs)
-
     def get_dimension(self, *args, **kwargs):
         return self.oracle.get_dimension(*args, **kwargs)
 
@@ -128,7 +139,7 @@ class PoolFromOracle(BasePool):
         """
         self.__x = x_data.copy()
 
-    def discretize_random(self, n: int):
+    def discretize_random(self,n : int):
         r"""
         set x randomly from the space defined in the oracle (get discretized input space from the oracle)
         """
@@ -140,31 +151,5 @@ class PoolFromOracle(BasePool):
     def get_context_status(self, *args, **kwargs):
         return self.oracle.get_context_status(*args, **kwargs)
 
-    def _constrain_data(
-        self, X_origin, Y_origin, X_new, Y_new, n_target: int, constraint_lower: float, constraint_upper: float
-    ):
-        r"""
-        return X, Y
-            X are elements of X_origin and X_new that have corresponding Y under the constraint
-            Y are corresponding to X
-        """
-        mask = np.logical_and(Y_new >= constraint_lower, Y_new <= constraint_upper)[:, 0]
-
-        if X_origin is None:
-            X = X_new[mask]
-            Y = Y_new[mask]
-        else:
-            X = np.vstack((X_origin, X_new[mask]))
-            Y = np.vstack((Y_origin, Y_new[mask]))
-
-        X, unique_idx = row_wise_unique(X)
-        Y = Y[unique_idx]
-
-        n_constr = X.shape[0]
-        idx = np.random.choice(n_constr, size=min(n_target, n_constr), replace=False)
-
-        return X[idx], Y[idx]
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     PoolFromOracle(None).get_grid_data(10, False)

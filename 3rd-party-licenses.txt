@@ -50,8 +50,8 @@ Copyright: Copyright (c) 2022 Jonas Rothfuss
 c. SafeOpt
 
 Files in alef:
-alef/acquisition_function/safe_acquisition_functions/deprecated/safe_opt_lipschitz.py
-alef/acquisition_function/safe_acquisition_functions/safe_opt.py
+alef/acquisition_functions/safe_acquisition_functions/deprecated/safe_opt_lipschitz.py
+alef/acquisition_functions/safe_acquisition_functions/safe_opt.py
 alef/bayesian_optimization/bayesian_optimizer_constrained.py
 
 Files in SafeOpt:
@@ -66,16 +66,16 @@ Copyright: Copyright (c) 2015 Felix Berkenkamp
 d. Idad
 
 Files in alef:
-alef/active_learner/amortized_policies/loss/multiple_steps/base_oed_loss.py
-alef/active_learner/amortized_policies/loss/multiple_steps/oed_bb_mi.py
-alef/active_learner/amortized_policies/loss/multiple_steps/oed_mi.py
-alef/active_learner/amortized_policies/nn/modules/emitter.py
-alef/active_learner/amortized_policies/nn/modules/essential.py
-alef/active_learner/amortized_policies/nn/modules/history_encoder.py
-alef/active_learner/amortized_policies/nn/modules/selfattention.py
-alef/active_learner/amortized_policies/nn/aggregators.py
-alef/active_learner/amortized_policies/nn/idad_critics.py
-alef/active_learner/amortized_policies/nn/policies_oed_baselines.py
+alef/active_learners/amortized_policies/loss/multiple_steps/base_oed_loss.py
+alef/active_learners/amortized_policies/loss/multiple_steps/oed_bb_mi.py
+alef/active_learners/amortized_policies/loss/multiple_steps/oed_mi.py
+alef/active_learners/amortized_policies/nn/modules/emitter.py
+alef/active_learners/amortized_policies/nn/modules/essential.py
+alef/active_learners/amortized_policies/nn/modules/history_encoder.py
+alef/active_learners/amortized_policies/nn/modules/selfattention.py
+alef/active_learners/amortized_policies/nn/aggregators.py
+alef/active_learners/amortized_policies/nn/idad_critics.py
+alef/active_learners/amortized_policies/nn/policies_oed_baselines.py
 
 Files in Idad:
 /blob/main/estimators/mi.py
@@ -94,10 +94,10 @@ Copyright (c) 2021 Adam Foster, Desi R. Ivanova, Steven Kleinegesse
 e. dad
 
 Files in alef:
-alef/active_learner/amortized_policies/loss/multiple_steps/oed_mi.py
-alef/active_learner/amortized_policies/training/dad_oed.py
-alef/active_learner/amortized_policies/utils/distributions.py
-alef/active_learner/amortized_policies/utils/oed_primitives.py
+alef/active_learners/amortized_policies/loss/multiple_steps/oed_mi.py
+alef/active_learners/amortized_policies/training/dad_oed.py
+alef/active_learners/amortized_policies/utils/distributions.py
+alef/active_learners/amortized_policies/utils/oed_primitives.py
 
 Files in dad:
 /blob/main/contrastive/mi.py
@@ -114,7 +114,7 @@ Copyright (c) 2021 Adam Foster, Desi R. Ivanova
 f. Neural-Process-Family
 
 Files in alef:
-alef/active_learner/amortized_policies/nn/modules/selfattention.py
+alef/active_learners/amortized_policies/nn/modules/selfattention.py
 
 Files in Neural-Process-Family:
 https://github.com/YannDubs/Neural-Process-Family/blob/master/npf/utils/initialization.py

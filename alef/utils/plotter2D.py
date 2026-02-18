@@ -37,9 +37,7 @@ class Plotter2D:
             )
         self.fig.colorbar(contour, ax=self.give_axes(ax_num, v_ax))
 
-    def add_gt_function_with_mask(
-        self, x, ground_truth, mask, cmap, levels, ax_num, v_ax=0, alpha=1.0, use_levels=True
-    ):
+    def add_gt_function_with_mask(self, x, ground_truth, mask, cmap, levels, ax_num, v_ax=0, alpha=1.0, use_levels=True):
         assert x.shape[1] == 2
         mask = np.squeeze(mask).astype(bool)
         assert mask.shape[0] == x.shape[0]
@@ -47,9 +45,7 @@ class Plotter2D:
         tri_x.set_mask(np.all(mask[tri_x.triangles], axis=1))
 
         if use_levels:
-            contour = self.give_axes(ax_num, v_ax).tricontourf(
-                tri_x, ground_truth, levels=levels, cmap=cmap, alpha=alpha
-            )
+            contour = self.give_axes(ax_num, v_ax).tricontourf(tri_x, ground_truth, levels=levels, cmap=cmap, alpha=alpha)
         else:
             contour = self.give_axes(ax_num, v_ax).tricontourf(tri_x, ground_truth, cmap=cmap, alpha=alpha)
         self.fig.colorbar(contour, ax=self.give_axes(ax_num, v_ax))
@@ -94,13 +90,7 @@ class Plotter2D:
                 return self.axes[v_ax, ax_num]
 
     def configure_axes(
-        self,
-        ax_num: int,
-        v_ax: int = 0,
-        ax_title: str = None,
-        x_label: str = None,
-        y_label: str = None,
-        add_legend: bool = False,
+        self, ax_num: int, v_ax: int = 0, ax_title: str = None, x_label: str = None, y_label: str = None, add_legend: bool = False
     ):
         ax = self.give_axes(ax_num, v_ax)
         ax.set_xlabel(x_label)

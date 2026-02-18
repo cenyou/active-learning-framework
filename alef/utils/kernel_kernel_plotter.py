@@ -12,14 +12,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import json
 import logging
 import os
+import pickle
 from typing import List
 from matplotlib import pyplot as plt
 import matplotlib
 
 import numpy as np
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
+from alef.configs.kernels.grammar_tree_kernel_kernel_configs import OTWeightedDimsExtendedGrammarKernelConfig, OTWeightedDimsInvarianceGrammarKernelConfig, OTWeightedDimsPrunedSubtreesGrammarKernelConfig, OptimalTransportGrammarKernelConfig
 from alef.configs.models.object_gp_model_config import BasicObjectGPModelConfig
 from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression
 from alef.kernels.kernel_kernel_grammar_tree import OptimalTransportKernelKernel
@@ -27,8 +30,10 @@ from alef.kernels.kernel_kernel_hellinger import KernelKernelHellinger
 from alef.models.model_factory import ModelFactory
 from alef.models.object_mean_functions import ObjectConstant
 from alef.utils.utils import manhatten_distance
+import logging
+from alef.utils.custom_logging import getLogger
 
-matplotlib_logger = logging.getLogger("matplotlib")
+matplotlib_logger = getLogger("matplotlib")
 matplotlib_logger.setLevel(logging.WARNING)
 
 
@@ -47,12 +52,8 @@ class KernelKernelPlotter:
         self.kernel_kernel_config = kernel_kernel_config
         self.output_path = output_path
 
-    def target_difference_distance_plot(
-        self, x_data: List[BaseKernelGrammarExpression], y_data: np.array, target_name: str, data_set_identifier: str
-    ):
-        object_gp_model_config = BasicObjectGPModelConfig(
-            kernel_config=self.kernel_kernel_config, perform_multi_start_optimization=False, optimize_hps=True
-        )
+    def target_difference_distance_plot(self, x_data: List[BaseKernelGrammarExpression], y_data: np.array, target_name: str, data_set_identifier: str):
+        object_gp_model_config = BasicObjectGPModelConfig(kernel_config=self.kernel_kernel_config, perform_multi_start_optimization=False, optimize_hps=True)
         model = ModelFactory.build(object_gp_model_config)
         assert isinstance(model.kernel, OptimalTransportKernelKernel) or isinstance(model.kernel, KernelKernelHellinger)
         model.set_mean_function(ObjectConstant())
@@ -62,17 +63,11 @@ class KernelKernelPlotter:
         target_abs_difference = manhatten_distance(y_data, y_data)
         n_data = len(x_data)
         for i, distance_matrix in enumerate(manhatten_distances):
-            self.create_distance_matrix_plots(
-                n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, "W" + str(i)
-            )
+            self.create_distance_matrix_plots(n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, "W" + str(i))
         distance_matrix = model.model.kernel.get_distance_matrix(x_data)
-        self.create_distance_matrix_plots(
-            n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, ""
-        )
+        self.create_distance_matrix_plots(n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, "")
 
-    def create_distance_matrix_plots(
-        self, n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, suffix
-    ):
+    def create_distance_matrix_plots(self, n_data, target_name, distance_matrix, target_abs_difference, data_set_identifier, suffix):
         distance_list = []
         difference_list = []
         for i in range(0, n_data):
@@ -97,9 +92,7 @@ class KernelKernelPlotter:
         ax2.set_ylabel("Kernel Index")
         ax2.set_title("SOT Distance Matrix")
         plt.colorbar(im2, ax=ax2)
-        plt.savefig(
-            os.path.join(self.output_path, "sot_dist_matrix_" + suffix + "_" + data_set_identifier + ".png"), dpi=400
-        )
+        plt.savefig(os.path.join(self.output_path, "sot_dist_matrix_" + suffix + "_" + data_set_identifier + ".png"), dpi=400)
         plt.close()
 
     def save_kernel_parameters(self, model, data_set_identifier):
@@ -109,6 +102,4 @@ class KernelKernelPlotter:
             variance = model.model.kernel.variance.numpy()
             likelihood_variance = model.model.likelihood.variance.numpy()
             parameter_vector = np.concatenate((alphas, [lengthscale], [variance], [likelihood_variance]))
-            np.savetxt(
-                os.path.join(self.output_path, "kernel_parameters_" + data_set_identifier + ".txt"), parameter_vector
-            )
+            np.savetxt(os.path.join(self.output_path, "kernel_parameters_" + data_set_identifier + ".txt"), parameter_vector)

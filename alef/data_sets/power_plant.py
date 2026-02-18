@@ -14,17 +14,20 @@
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from enum import Enum
 
-from alef.data_sets.base_data_set import StandardDataSet
+from pandas.core import base
+from alef.data_sets.base_data_set import BaseDataset, StandardDataSet
 
-from alef.utils.plot_utils import active_learning_nd_plot
+from alef.utils.plot_utils import active_learning_1d_plot, active_learning_2d_plot, active_learning_nd_plot
 from alef.enums.data_sets_enums import InputPreprocessingType, OutputPreprocessingType
 from alef.utils.utils import normalize_data, min_max_normalize_data
 import os
 
 
 class PowerPlant(StandardDataSet):
-    def __init__(self, base_path, file_name="power_plant_data.csv"):
+    def __init__(self, base_path: str, file_name="Folds5x2_pp.xlsx"):
         super().__init__()
         self.file_path = os.path.join(base_path, file_name)
         self.input_preprocessing_type = InputPreprocessingType.MIN_MAX_NORMALIZATION
@@ -32,9 +35,9 @@ class PowerPlant(StandardDataSet):
         self.name = "PowerPlant"
 
     def load_data_set(self):
-        df = pd.read_csv(self.file_path, sep=",")
+        df = pd.read_excel(self.file_path, sheet_name='Sheet1', header=[0])
         x_list = []
-        label_name = "EP"
+        label_name = "PE"
         print(df.columns)
         assert label_name in df.columns
         for col_name in df.columns:

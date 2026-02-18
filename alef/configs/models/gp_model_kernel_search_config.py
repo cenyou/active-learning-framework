@@ -12,27 +12,21 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import Tuple
+from typing import Tuple, Type
 from pydantic import BaseSettings
 
-from alef.configs.kernels.kernel_grammar_generators.base_kernel_grammar_generator_config import (
-    BaseKernelGrammarGeneratorConfig,
-)
+from alef.configs.kernels.kernel_grammar_generators.base_kernel_grammar_generator_config import BaseKernelGrammarGeneratorConfig
 from alef.configs.kernels.kernel_grammar_generators.cks_high_dim_generator_config import CKSHighDimGeneratorConfig
 from alef.configs.kernels.kernel_grammar_generators.cks_with_rq_generator_config import (
     CKSWithRQGeneratorConfig,
     CKSWithRQTimeSeriesGeneratorConfig,
 )
-from alef.configs.kernels.kernel_grammar_generators.compositional_kernel_search_configs import (
-    CKSTimeSeriesGeneratorConfig,
-)
+from alef.configs.kernels.kernel_grammar_generators.compositional_kernel_search_configs import CKSTimeSeriesGeneratorConfig
 from alef.configs.kernels.kernel_grammar_generators.local_kernel_search_generator_config import (
     BigLocalNDimFullKernelsGrammarGeneratorConfig,
     FlatLocalKernelSearchSpaceConfig,
 )
-from alef.configs.kernels.kernel_grammar_generators.n_dim_full_kernels_generators_configs import (
-    BigNDimFullKernelsGrammarGeneratorConfig,
-)
+from alef.configs.kernels.kernel_grammar_generators.n_dim_full_kernels_generators_configs import BigNDimFullKernelsGrammarGeneratorConfig
 from alef.models.gp_model_kernel_search import OracleType
 
 
@@ -75,15 +69,11 @@ class GPFlatLocalKernelSearchConfig(BaseGPModelKernelSearchConfig):
 
 
 class GPBigLocalNDimFullKernelSearchConfig(BaseGPModelKernelSearchConfig):
-    grammar_generator_config: BaseKernelGrammarGeneratorConfig = BigLocalNDimFullKernelsGrammarGeneratorConfig(
-        input_dimension=0
-    )
+    grammar_generator_config: BaseKernelGrammarGeneratorConfig = BigLocalNDimFullKernelsGrammarGeneratorConfig(input_dimension=0)
 
 
 class GPBigNDimFullKernelSearchConfig(BaseGPModelKernelSearchConfig):
-    grammar_generator_config: BaseKernelGrammarGeneratorConfig = BigNDimFullKernelsGrammarGeneratorConfig(
-        input_dimension=0
-    )
+    grammar_generator_config: BaseKernelGrammarGeneratorConfig = BigNDimFullKernelsGrammarGeneratorConfig(input_dimension=0)
 
 
 class GPKernelSearchCKSwithRQEvidence(BaseGPModelKernelSearchConfig):

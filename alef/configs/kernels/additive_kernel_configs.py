@@ -26,6 +26,9 @@ from alef.configs.base_parameters import (
 from alef.configs.prior_parameters import (
     KERNEL_LENGTHSCALE_GAMMA,
     KERNEL_VARIANCE_GAMMA,
+    PERIODIC_KERNEL_PERIOD_GAMMA,
+    LINEAR_KERNEL_OFFSET_GAMMA,
+    RQ_KERNEL_ALPHA_GAMMA,
 )
 
 

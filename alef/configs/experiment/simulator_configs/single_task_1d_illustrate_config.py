@@ -12,18 +12,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import List, Union, Sequence
 from alef.configs.experiment.simulator_configs.base_simulator_config import BaseSimulatorConfig
 from alef.enums.simulator_enums import InitialDataGenerationMethod
-
 
 class SingleTaskIllustrateConfig(BaseSimulatorConfig):
     n_pool: int
     data_path: str
-    additional_safety: bool = False
-    oracle_type: str = "illustrate"
+    additional_safety: bool=False
+    oracle_type: str="illustrate"
     initial_data_source: InitialDataGenerationMethod = InitialDataGenerationMethod.GENERATE
     target_box_a = 0.0
     target_box_width = 0.25
-    observation_noise: float = 0.01
-    seed: int = 1234
-    name: str = "single_task_illustrate"
+    observation_noise: float=0.01
+    seed: int=1234
+    name: str='single_task_illustrate'

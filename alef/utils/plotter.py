@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from enum import Enum
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -26,6 +27,7 @@ class Plotter:
         figsize = (5 * num_axes, 4 * v_axes)
         self.fig, self.axes = plt.subplots(v_axes, num_axes, sharex=share_x, sharey=share_y, figsize=figsize)
 
+
     def add_acquisition_score(self, x, score, color, ax_num, sort_x=True, v_ax=0):
         ax = self.give_axes(ax_num, v_ax).twinx()
         if sort_x:
@@ -33,9 +35,9 @@ class Plotter:
             ax.plot(x[sorted_indexes], score[sorted_indexes], color=color, alpha=0.5)
         else:
             ax.plot(x, score, color=color, alpha=0.5)
-        ax.set_ylabel("acquisition_score", color=color)
-        ax.tick_params(axis="y", labelcolor=color)
-
+        ax.set_ylabel('acquisition_score', color=color)
+        ax.tick_params(axis='y', labelcolor=color)
+    
     def add_gt_function(self, x, ground_truth, color, ax_num, sort_x=True, v_ax=0):
         if sort_x:
             sorted_indexes = np.argsort(x)
@@ -49,9 +51,7 @@ class Plotter:
     def add_datapoints_flex_style(self, x_data, y_data, color, mark, alpha, ax_num, sort_x=True, label=None, v_ax=0):
         if sort_x:
             sorted_indexes = np.argsort(x_data)
-            self.give_axes(ax_num, v_ax).plot(
-                x_data[sorted_indexes], y_data[sorted_indexes], mark, color=color, alpha=alpha, label=label
-            )
+            self.give_axes(ax_num, v_ax).plot(x_data[sorted_indexes], y_data[sorted_indexes], mark, color=color, alpha=alpha, label=label)
         else:
             self.give_axes(ax_num, v_ax).plot(x_data, y_data, mark, color=color, alpha=alpha, label=label)
 
@@ -105,13 +105,7 @@ class Plotter:
         axes = self.give_axes(ax_num, v_ax)
         for i in range(pred_mu.shape[1]):
             axes.plot(x, pred_mu[..., i], color=f"C{i}")
-            axes.fill_between(
-                x,
-                pred_mu[..., i] - bound_width[..., i],
-                pred_mu[..., i] + bound_width[..., i],
-                alpha=0.3,
-                color=f"C{i}",
-            )
+            axes.fill_between(x, pred_mu[..., i] - bound_width[..., i], pred_mu[..., i] + bound_width[..., i], alpha=0.3, color=f"C{i}")
 
     def add_hyperparameters(self, hyperparameters, ax_num, v_ax=0, losses=None, labels=None, sort_loss=True):
         """
@@ -158,9 +152,7 @@ class Plotter:
 
     def add_query_region(self, query_x_grid, ax_num, v_ax=0):
         min_y = self.give_axes(ax_num, v_ax).get_ylim()[0]
-        self.give_axes(ax_num, v_ax).plot(
-            query_x_grid, np.repeat(min_y, query_x_grid.shape[0]), "_", linewidth=10.0, color="purple"
-        )
+        self.give_axes(ax_num, v_ax).plot(query_x_grid, np.repeat(min_y, query_x_grid.shape[0]), "_", linewidth=10.0, color="purple")
 
     def save_fig(self, file_path, file_name):
         plt.savefig(os.path.join(file_path, file_name))
@@ -241,9 +233,7 @@ class PlotterPlotly:
         color = "blue"
         color = "51, 59, 255"
         self.fig.add_trace(
-            go.Scatter(
-                x=x, y=upper_two_sigma, line=dict(width=0), mode="lines", opacity=opacity_scale, showlegend=False
-            ),
+            go.Scatter(x=x, y=upper_two_sigma, line=dict(width=0), mode="lines", opacity=opacity_scale, showlegend=False),
             row=ax_num + 1,
             col=1,
         )
@@ -252,7 +242,7 @@ class PlotterPlotly:
                 x=x,
                 y=upper_sigma,
                 line=dict(width=0),
-                fillcolor=f"rgba({color},{0.3 * opacity_scale})",
+                fillcolor=f"rgba({color},{0.3*opacity_scale})",
                 mode="lines",
                 fill="tonexty",
                 showlegend=False,
@@ -265,7 +255,7 @@ class PlotterPlotly:
                 x=x,
                 y=pred_mu,
                 line=go.scatter.Line(color="blue"),
-                fillcolor=f"rgba({color},{0.6 * opacity_scale})",
+                fillcolor=f"rgba({color},{0.6*opacity_scale})",
                 mode="lines",
                 fill="tonexty",
                 showlegend=False,
@@ -278,7 +268,7 @@ class PlotterPlotly:
                 x=x,
                 y=lower_sigma,
                 line=dict(width=0),
-                fillcolor=f"rgba({color},{0.6 * opacity_scale})",
+                fillcolor=f"rgba({color},{0.6*opacity_scale})",
                 mode="lines",
                 fill="tonexty",
                 showlegend=False,
@@ -291,7 +281,7 @@ class PlotterPlotly:
                 x=x,
                 y=lower_two_sigma,
                 line=dict(width=0),
-                fillcolor=f"rgba({color},{0.3 * opacity_scale})",
+                fillcolor=f"rgba({color},{0.3*opacity_scale})",
                 mode="lines",
                 fill="tonexty",
                 showlegend=False,
@@ -309,15 +299,7 @@ class PlotterPlotly:
 
     def show(self):
         # self.update_layout()
-        config = {
-            "toImageButtonOptions": {
-                "format": "png",
-                "filename": "plot",
-                "height": self.height,
-                "width": self.width,
-                "scale": 6,
-            }
-        }
+        config = {"toImageButtonOptions": {"format": "png", "filename": "plot", "height": self.height, "width": self.width, "scale": 6}}
         self.fig.show(config=config)
 
     def update_layout(self):

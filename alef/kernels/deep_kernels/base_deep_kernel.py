@@ -35,7 +35,7 @@ class BaseDeepKernel(gpflow.kernels.Kernel, RegularizedKernelInterface):
         add_prior: bool,
         lengthscale_prior_parameters: Tuple[float, float],
         variance_prior_parameters: Tuple[float, float],
-        **kwargs,
+        **kwargs
     ):
         super().__init__()
         self.feature_extractor = feature_extractor
@@ -43,9 +43,7 @@ class BaseDeepKernel(gpflow.kernels.Kernel, RegularizedKernelInterface):
         self.input_dimension = input_dimension
         assert self.input_dimension == self.feature_extractor.get_input_dimension()
         self.feature_dimension = self.feature_extractor.get_output_dimension()
-        self.base_kernel = gpflow.kernels.Matern52(
-            lengthscales=f64(np.repeat(base_lengthscale, self.feature_dimension)), variance=f64([base_variance])
-        )
+        self.base_kernel = gpflow.kernels.Matern52(lengthscales=f64(np.repeat(base_lengthscale, self.feature_dimension)), variance=f64([base_variance]))
         gpflow.set_trainable(self.base_kernel.lengthscales, lengthscale_trainable)
         if add_prior:
             a_lengthscale, b_lengthscale = lengthscale_prior_parameters

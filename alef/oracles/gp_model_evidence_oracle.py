@@ -16,7 +16,8 @@ import logging
 import time
 from typing import Optional, Union
 
-from alef.configs.models.gp_model_config import GPModelWithNoisePriorConfig
+from tensorflow.python.ops.gen_math_ops import neg
+from alef.configs.models.gp_model_config import BasicGPModelConfig, GPModelFastConfig, GPModelWithNoisePriorConfig
 from alef.kernels.kernel_grammar.kernel_grammar_candidate_generator import KernelGrammarCandidateGenerator
 from alef.models.gp_model import GPModel
 from alef.oracles.base_object_oracle import BaseObjectOracle
@@ -29,7 +30,8 @@ from alef.configs.models.gp_model_laplace_config import BasicGPModelLaplaceConfi
 from alef.models.gp_model_laplace import GPModelLaplace
 from alef.utils.utils import calculate_rmse
 
-logger = logging.getLogger(__name__)
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class GPModelEvidenceOracle(BaseObjectOracle):
@@ -69,7 +71,7 @@ class GPModelEvidenceOracle(BaseObjectOracle):
                 kernel_config=BaseKernelConfig(name="dummy", input_dimension=0), n_starts_for_multistart_opt=10
             )
 
-    def query(self, x: Union[gpflow.kernels.Kernel, BaseKernelGrammarExpression]) -> np.float:
+    def query(self, x: Union[gpflow.kernels.Kernel, BaseKernelGrammarExpression]) -> float:
         time_before_query = time.perf_counter()
         if isinstance(x, gpflow.kernels.Kernel):
             kernel = x
@@ -107,9 +109,7 @@ class GPModelEvidenceOracle(BaseObjectOracle):
         return x_out, np.expand_dims(np.array(y_out), axis=1)
 
     def get_random_data_recursively(self, n_data, n_per_step: int = 5, filter_out_equivalent_expressions=False):
-        x_out = self.grammar_generator.get_dataset_recursivly_generated(
-            n_data, n_per_step, filter_out_equivalent_expressions
-        )
+        x_out = self.grammar_generator.get_dataset_recursivly_generated(n_data, n_per_step, filter_out_equivalent_expressions)
         y_out = []
         for kernel_expression in x_out:
             logger.info(str(kernel_expression))

@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Tuple, Dict
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 from alef.configs.base_parameters import (
@@ -19,21 +20,22 @@ from alef.configs.base_parameters import (
     BASE_KERNEL_LENGTHSCALE,
 )
 
-
 class BasicCoregionalizationSOConfig(BaseKernelConfig):
     variance_list: list = [BASE_KERNEL_VARIANCE, BASE_KERNEL_VARIANCE]
     lengthscale_list: list = [BASE_KERNEL_LENGTHSCALE, BASE_KERNEL_LENGTHSCALE]
     input_dimension: int
     output_dimension: int = 2
-    add_error_kernel: bool = False
+    add_error_kernel: bool=False
     add_prior: bool = False
-    lengthscale_prior_parameters = (1, 9)  # gamma mean
-    variance_prior_parameters = (1, 0.3)  # truncated normal
+    lengthscale_prior_parameters= (1, 9) # gamma mean
+    variance_prior_parameters= (1, 0.3) # truncated normal
     latent_kernel: LatentKernel = LatentKernel.MATERN52
-    active_on_single_dimension: bool = False
-    active_dimension: int = None
-    name: str = "BasicCoregionSO"
-
+    active_on_single_dimension: bool=False
+    active_dimension: int=None
+    name:str='BasicCoregionSO'
+    fix_kernel: bool=False
+    assign_values: bool=False
+    parameter_values: Dict={}
 
 class CoregionalizationSOWithPriorConfig(BasicCoregionalizationSOConfig):
     add_prior: bool = True
@@ -46,14 +48,14 @@ class BasicCoregionalizationMOConfig(BaseKernelConfig):
     input_dimension: int
     output_dimension: int = 2
     add_prior: bool = False
-    lengthscale_prior_parameters = (1, 9)  # gamma mean
-    variance_prior_parameters = (1, 0.3)  # truncated normal
+    lengthscale_prior_parameters= (1, 9) # gamma mean
+    variance_prior_parameters= (1, 0.3) # truncated normal
     latent_kernel: LatentKernel = LatentKernel.MATERN52
-    active_on_single_dimension: bool = False
-    active_dimension: int = None
-    name: str = "BasicCoregionMO"
-
+    active_on_single_dimension: bool=False
+    active_dimension: int=None
+    name:str='BasicCoregionMO'
 
 class CoregionalizationMOWithPriorConfig(BasicCoregionalizationMOConfig):
     add_prior: bool = True
     name = "CoregionMOWithPrior"
+

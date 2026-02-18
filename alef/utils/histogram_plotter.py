@@ -15,39 +15,27 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from numpy.core.defchararray import upper
 
+from numpy.core.fromnumeric import sort
 
 class HistogramPlotter:
-    def __init__(self, num_axes, v_axes=1):
+
+    def __init__(self,num_axes, v_axes=1):
         self.num_axes = num_axes
         self.num_v_axes = v_axes
-        figsize = (4 * num_axes, 4 * v_axes)
-        self.fig, self.axes = plt.subplots(v_axes, num_axes, figsize=figsize)
+        figsize=(4*num_axes,4*v_axes)
+        self.fig,self.axes = plt.subplots(v_axes,num_axes,figsize=figsize)
 
-    def _add_histogram(
-        self, *, values=None, bins=None, density=False, cumulative=False, color=None, label=None, ax_num=0, v_ax=0
-    ):
+    def _add_histogram(self,*,values=None,bins=None, density=False, cumulative=False,color=None,label=None,ax_num=0, v_ax=0):
         values = np.array(values)
-        self.give_axes(ax_num, v_ax).hist(
-            values, bins=bins, density=density, cumulative=cumulative, color=color, label=label
-        )
+        self.give_axes(ax_num, v_ax).hist(values,bins=bins, density=density, cumulative=cumulative, color=color, label=label)
 
     def add_histogram(self, values, bins, color, label, ax_num, v_ax=0):
-        self._add_histogram(
-            values=values,
-            bins=bins,
-            density=False,
-            cumulative=False,
-            color=color,
-            label=label,
-            ax_num=ax_num,
-            v_ax=v_ax,
-        )
+        self._add_histogram(values=values, bins=bins, density=False, cumulative=False, color=color, label=label, ax_num=ax_num, v_ax=v_ax)
 
     def add_histogram_density(self, values, bins, color, label, ax_num, v_ax=0):
-        self._add_histogram(
-            values=values, bins=bins, density=True, cumulative=False, color=color, label=label, ax_num=ax_num, v_ax=v_ax
-        )
+        self._add_histogram(values=values, bins=bins, density=True, cumulative=False, color=color, label=label, ax_num=ax_num, v_ax=v_ax)
 
     def add_vline(self, value, color, ax_num, v_ax=0):
         if value != np.inf and value != -np.inf:
@@ -55,18 +43,18 @@ class HistogramPlotter:
 
     def configure_axes(
         self,
-        ax_num: int,
-        v_ax: int = 0,
-        ax_title: str = None,
-        x_label: str = None,
-        y_label: str = None,
-        log_scale_y: bool = False,
-        add_legend: bool = False,
+        ax_num : int,
+        v_ax: int=0,
+        ax_title : str=None,
+        x_label: str=None,
+        y_label : str=None,
+        log_scale_y : bool=False,
+        add_legend : bool=False
     ):
         ax = self.give_axes(ax_num, v_ax)
         ax.set_xlabel(x_label)
         if log_scale_y:
-            ax.set_yscale("log")
+            ax.set_yscale('log')
             ax.set_ylabel(y_label + " (log-scale)")
         else:
             ax.set_ylabel(y_label)
@@ -86,9 +74,10 @@ class HistogramPlotter:
             else:
                 return self.axes[v_ax, ax_num]
 
-    def save_fig(self, file_path, file_name):
+
+    def save_fig(self,file_path,file_name):
         plt.tight_layout()
-        plt.savefig(os.path.join(file_path, file_name))
+        plt.savefig(os.path.join(file_path,file_name))
         plt.close()
 
     def show(self):
@@ -96,11 +85,10 @@ class HistogramPlotter:
         plt.show()
 
 
-if __name__ == "__main__":
-    plotter = HistogramPlotter(1)
-    plotter.add_histogram(
-        [200, 100, 500, 700], [0.3, 0.5, 0.2, 0.15], [0.25, 0.45, 0.15, 0.1], [0.35, 0.55, 0.25, 0.2], "red", "HHK", 0
-    )
-    plotter.add_metrics_curve([200, 100, 500, 700], [0.4, 0.7, 0.15, 0.0], "blue", "RBF", 0)
-    plotter.configure_axes(0, 0, "RMSE", "n_data", "RMSE", False, True)
+
+if __name__ == '__main__':
+    plotter= HistogramPlotter(1)
+    plotter.add_histogram([200,100,500,700],[0.3,0.5,0.2,0.15],[0.25,0.45,0.15,0.1],[0.35,0.55,0.25,0.2],'red','HHK',0)
+    plotter.add_metrics_curve([200,100,500,700],[0.4,0.7,0.15,0.0],'blue','RBF',0)
+    plotter.configure_axes(0,0,'RMSE','n_data','RMSE',False,True)
     plotter.show()

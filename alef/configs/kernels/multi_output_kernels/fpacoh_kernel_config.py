@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Tuple
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 from alef.configs.base_parameters import (
@@ -19,14 +20,14 @@ from alef.configs.base_parameters import (
     BASE_KERNEL_LENGTHSCALE,
 )
 
-
 class BasicFPACOHKernelConfig(BaseKernelConfig):
     base_variance: float = BASE_KERNEL_VARIANCE
-    base_lengthscale: float = BASE_KERNEL_LENGTHSCALE
+    base_lengthscale:float = BASE_KERNEL_LENGTHSCALE
     input_dimension: int
     output_dimension: int
     latent_kernel: LatentKernel = LatentKernel.MATERN52
-    active_on_single_dimension: bool = False
-    active_dimension: int = None
-    name: str = "BasicFPACOH"
-    add_prior: bool = False
+    active_on_single_dimension: bool=False
+    active_dimension: int=None
+    name:str='BasicFPACOH'
+    add_prior: bool=False
+

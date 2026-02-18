@@ -14,7 +14,10 @@
 
 import pandas as pd
 import numpy as np
-from alef.utils.plot_utils import active_learning_nd_plot
+import matplotlib.pyplot as plt
+from enum import Enum
+from alef.data_sets.base_data_set import BaseDataset
+from alef.utils.plot_utils import active_learning_1d_plot, active_learning_2d_plot, active_learning_nd_plot
 from alef.enums.data_sets_enums import InputPreprocessingType, OutputPreprocessingType
 from alef.utils.utils import normalize_data, min_max_normalize_data
 from alef.data_sets.base_data_set import StandardDataSet
@@ -22,7 +25,7 @@ import os
 
 
 class Kin8nm(StandardDataSet):
-    def __init__(self, base_path, file_name="dataset_2175_kin8nm.csv"):
+    def __init__(self, base_path: str, file_name: str="dataset_2175_kin8nm.csv"):
         super().__init__()
         self.file_path = os.path.join(base_path, file_name)
         self.input_preprocessing_type = InputPreprocessingType.MIN_MAX_NORMALIZATION

@@ -16,6 +16,7 @@ from enum import Enum
 
 
 class OutputType(Enum):
-    SINGLE_OUTPUT = 0  # data [N, 1] or [N, ]
-    MULTI_OUTPUT = 1  # data [N, P]
-    MULTI_OUTPUT_FLATTENED = 2  # data [N, 2], the second column is output indices
+    SINGLE_OUTPUT = 0 # data [N, 1] or [N, ]
+    MULTI_OUTPUT = 1 # data [N, P]
+    MULTI_OUTPUT_FLATTENED = 2 # data [N, 2], the second column is output indices
+

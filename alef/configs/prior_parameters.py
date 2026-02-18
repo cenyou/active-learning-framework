@@ -13,12 +13,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Prior parameters for kernel parameters - define globally to
+Prior parameters for kernel parameters - define globally to 
 assert consitency between implementations (gpflow,gpytorch,amortized_inference) adn between
 parts and combined kernels such as CH operator and HHK kernel etc.
 """
-
-from enum import IntEnum
+from enum import Enum, IntEnum
 import numpy as np
 
 
@@ -31,6 +30,7 @@ class PriorSettings(IntEnum):
 PRIOR_SETTING = PriorSettings.STANDARD
 
 if PRIOR_SETTING == PriorSettings.STANDARD:
+
     EXPECTED_OBSERVATION_NOISE = 0.1
     NOISE_VARIANCE_EXPONENTIAL_LAMBDA = 1.0 / np.power(EXPECTED_OBSERVATION_NOISE, 2.0)
     KERNEL_VARIANCE_GAMMA = (2.0, 3.0)
@@ -42,6 +42,7 @@ if PRIOR_SETTING == PriorSettings.STANDARD:
     WEIGHTED_ADDITIVE_KERNEL_ALPHA_NORMAL = (0.0, 2.0)
 
 if PRIOR_SETTING == PriorSettings.HIGH_NOISE:
+
     EXPECTED_OBSERVATION_NOISE = 0.5
     NOISE_VARIANCE_EXPONENTIAL_LAMBDA = 1.0 / np.power(EXPECTED_OBSERVATION_NOISE, 2.0)
     KERNEL_VARIANCE_GAMMA = (10.0, 9.0)

@@ -15,16 +15,19 @@
 import gpflow
 from gpflow.utilities import positive
 import tensorflow as tf
+import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 import numpy as np
+import matplotlib.pyplot as plt
+import copy
 
 from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
-from typing import Tuple
 
 gpflow.config.set_default_float(np.float64)
 gpflow.config.set_default_jitter(1e-4)
 
 f64 = gpflow.utilities.to_default_float
+from typing import Tuple
 
 
 class HierarchicalHyperplaneKernel(gpflow.kernels.Kernel):
@@ -39,7 +42,7 @@ class HierarchicalHyperplaneKernel(gpflow.kernels.Kernel):
         learn_smoothing_parameter: bool,
         topology: int,
         smoothing_prior_parameters: Tuple[float, float],
-        **kwargs,
+        **kwargs
     ):
         super().__init__()
         self.topology = topology
@@ -61,18 +64,13 @@ class HierarchicalHyperplaneKernel(gpflow.kernels.Kernel):
         self.smoothing_list = []
         self.hyperplane_parameter_list = []
         for j in range(0, self.M):
-            smoothing_param = gpflow.Parameter(
-                [self.base_smoothing], transform=positive(), trainable=self.learn_smoothing_parameter
-            )
+            smoothing_param = gpflow.Parameter([self.base_smoothing], transform=positive(), trainable=self.learn_smoothing_parameter)
             a_smoothing, b_smoothing = self.smoothing_prior_parameters
             smoothing_param.prior = tfd.Gamma(f64([a_smoothing]), f64([b_smoothing]))
             self.smoothing_list.append(smoothing_param)
-            w = gpflow.Parameter(
-                np.repeat(self.base_hyperplane_mu, self.dimension + 1), trainable=self.hyperplanes_learnable
-            )
+            w = gpflow.Parameter(np.repeat(self.base_hyperplane_mu, self.dimension + 1), trainable=self.hyperplanes_learnable)
             w.prior = tfd.Normal(
-                np.repeat(self.base_hyperplane_mu, self.dimension + 1),
-                np.repeat(self.base_hyperplane_std, self.dimension + 1),
+                np.repeat(self.base_hyperplane_mu, self.dimension + 1), np.repeat(self.base_hyperplane_std, self.dimension + 1)
             )
             self.hyperplane_parameter_list.append(w)
 
@@ -103,10 +101,7 @@ class HierarchicalHyperplaneKernel(gpflow.kernels.Kernel):
                 smoothing = self.smoothing_list[j][0]
                 prob_elem = tf.math.pow(
                     self.sigmoid(w_0 + tf.linalg.matmul(x, tf.transpose(w_rest)), smoothing), self.left_matrix[k, j]
-                ) * tf.math.pow(
-                    1 - self.sigmoid(w_0 + tf.linalg.matmul(x, tf.transpose(w_rest)), smoothing),
-                    self.right_matrix[k, j],
-                )
+                ) * tf.math.pow(1 - self.sigmoid(w_0 + tf.linalg.matmul(x, tf.transpose(w_rest)), smoothing), self.right_matrix[k, j])
                 prob = prob * prob_elem
             expert_probabilities.append(prob)
         return expert_probabilities
@@ -159,9 +154,7 @@ class HierarchicalHyperplaneKernel(gpflow.kernels.Kernel):
         self.n_experts = self.left_matrix.shape[0]  ## Number of experts
         self.M = self.left_matrix.shape[1]  ## Number of gate nodes
         assert self.n_experts == self.right_matrix.shape[0]
-        assert (self.left_matrix.shape[0] * self.left_matrix.shape[1]) == (
-            (self.left_matrix == 0).sum() + (self.left_matrix == 1).sum()
-        )
+        assert (self.left_matrix.shape[0] * self.left_matrix.shape[1]) == ((self.left_matrix == 0).sum() + (self.left_matrix == 1).sum())
         assert (self.right_matrix.shape[0] * self.right_matrix.shape[1]) == (
             (self.right_matrix == 0).sum() + (self.right_matrix == 1).sum()
         )
@@ -213,7 +206,7 @@ class HKKInputInitializedBaseKernel(HierarchicalHyperplaneKernel, InputInitializ
         learn_smoothing_parameter: bool,
         topology: int,
         smoothing_prior_parameters: Tuple[float, float],
-        **kwargs,
+        **kwargs
     ):
         assert isinstance(base_kernel, InputInitializedKernelInterface)
         super().__init__(
@@ -226,7 +219,7 @@ class HKKInputInitializedBaseKernel(HierarchicalHyperplaneKernel, InputInitializ
             learn_smoothing_parameter,
             topology,
             smoothing_prior_parameters,
-            **kwargs,
+            **kwargs
         )
 
     def initialize_parameters(self, x_data, y_data):

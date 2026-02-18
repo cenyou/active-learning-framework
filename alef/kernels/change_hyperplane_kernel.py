@@ -26,17 +26,7 @@ f64 = gpflow.utilities.to_default_float
 
 
 class ChangeHyperplaneKernel(gpflow.kernels.Kernel):
-    def __init__(
-        self,
-        kernel_1: gpflow.kernels.Kernel,
-        kernel_2: gpflow.kernels.Kernel,
-        input_dimension: int,
-        base_hyperplane_mu: float,
-        base_hyperplane_std: float,
-        base_smoothing: float,
-        smoothing_prior_parameters: Tuple[float, float],
-        **kwargs,
-    ):
+    def __init__(self, kernel_1: gpflow.kernels.Kernel, kernel_2: gpflow.kernels.Kernel, input_dimension: int, base_hyperplane_mu: float, base_hyperplane_std: float, base_smoothing: float, smoothing_prior_parameters: Tuple[float, float], **kwargs):
         super().__init__()
         dimension = input_dimension
         self.kernel_1 = kernel_1
@@ -45,9 +35,7 @@ class ChangeHyperplaneKernel(gpflow.kernels.Kernel):
         a_smoothing, b_smoothing = smoothing_prior_parameters
         self.smoothing_param.prior = tfd.Gamma(f64(a_smoothing), f64(b_smoothing))
         self.w = gpflow.Parameter(np.repeat(base_hyperplane_mu, dimension + 1))
-        self.w.prior = tfd.Normal(
-            np.repeat(base_hyperplane_mu, dimension + 1), np.repeat(base_hyperplane_std, dimension + 1)
-        )
+        self.w.prior = tfd.Normal(np.repeat(base_hyperplane_mu, dimension + 1), np.repeat(base_hyperplane_std, dimension + 1))
 
     def sigmoid(self, x, smoothing):
         return 1 / (1 + tf.math.exp(-1 * x * smoothing))
@@ -69,21 +57,15 @@ class ChangeHyperplaneKernel(gpflow.kernels.Kernel):
         weight1_X2 = self.get_left_weight(X2)
         weight2_X = self.get_right_weight(X)
         weight2_X2 = self.get_right_weight(X2)
-        K = tf.matmul(weight1_X, tf.transpose(weight1_X2)) * self.kernel_1.K(X, X2) + tf.matmul(
-            weight2_X, tf.transpose(weight2_X2)
-        ) * self.kernel_2.K(X, X2)
+        K = tf.matmul(weight1_X, tf.transpose(weight1_X2)) * self.kernel_1.K(X, X2) + tf.matmul(weight2_X, tf.transpose(weight2_X2)) * self.kernel_2.K(X, X2)
         return K
 
     def K_diag(self, X):
-        return tf.math.multiply(
-            tf.squeeze(tf.math.pow(self.get_left_weight(X), 2.0)), self.kernel_1.K_diag(X)
-        ) + tf.math.multiply(tf.squeeze(tf.math.pow(self.get_right_weight(X), 2.0)), self.kernel_2.K_diag(X))
+        return tf.math.multiply(tf.squeeze(tf.math.pow(self.get_left_weight(X), 2.0)), self.kernel_1.K_diag(X)) + tf.math.multiply(tf.squeeze(tf.math.pow(self.get_right_weight(X), 2.0)), self.kernel_2.K_diag(X))
 
 
 if __name__ == "__main__":
-    ch_kernel = ChangeHyperplaneKernel(
-        gpflow.kernels.RBF(1.0, [1.0, 1.0]), gpflow.kernels.RBF(1.0, [0.2, 0.2]), 2, 0.0, 1.0, 3.0, (2.0, 2.0)
-    )
+    ch_kernel = ChangeHyperplaneKernel(gpflow.kernels.RBF(1.0, [1.0, 1.0]), gpflow.kernels.RBF(1.0, [0.2, 0.2]), 2, 0.0, 1.0, 3.0, (2.0, 2.0))
     X = np.array([[1.0, 2.0], [0.0, 0.0], [1.0, 1.0]])
     print(ch_kernel.K(X))
     print(ch_kernel.K_diag(X))

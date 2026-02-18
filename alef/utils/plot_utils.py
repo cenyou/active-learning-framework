@@ -14,6 +14,7 @@
 
 from typing import Dict, List, Optional, Union
 import numpy as np
+from numpy.lib.shape_base import expand_dims
 import pandas as pd
 from pandas.plotting import scatter_matrix
 import os
@@ -106,16 +107,7 @@ def active_learning_1d_plot_with_acquisition(
 
 
 def active_learning_1d_plot_multioutput(
-    x_grid,
-    pred_mu_grid,
-    pred_sigma_grid,
-    x_data,
-    y_data,
-    x_query,
-    y_query,
-    save_plot=False,
-    file_name=None,
-    file_path=None,
+    x_grid, pred_mu_grid, pred_sigma_grid, x_data, y_data, x_query, y_query, save_plot=False, file_name=None, file_path=None
 ):
     output_dim = y_data.shape[1]
     assert output_dim == pred_mu_grid.shape[1]
@@ -123,9 +115,51 @@ def active_learning_1d_plot_multioutput(
     for m in range(0, output_dim):
         plotter_object.add_datapoints(np.squeeze(x_data), np.squeeze(y_data[:, m]), "r", m)
         plotter_object.add_datapoints(x_query, y_query[m], "green", m)
-        plotter_object.add_predictive_dist(
-            np.squeeze(x_grid), np.squeeze(pred_mu_grid[:, m]), np.squeeze(pred_sigma_grid[:, m]), m
-        )
+        plotter_object.add_predictive_dist(np.squeeze(x_grid), np.squeeze(pred_mu_grid[:, m]), np.squeeze(pred_sigma_grid[:, m]), m)
+    if save_plot:
+        plotter_object.save_fig(file_path, file_name)
+    else:
+        plotter_object.show()
+
+
+def active_learning_1d_plot_with_true_safety_measure(
+    x_grid,
+    pred_mu_grid,
+    pred_sigma_grid,
+    x_data,
+    y_data,
+    z_data,
+    x_query,
+    y_query,
+    z_query,
+    safety_thresholds_lower,
+    safety_thresholds_upper,
+    gt_available=False,
+    gt_x=None,
+    gt_f=None,
+    gt_fz=None,
+    save_plot=False,
+    file_name=None,
+    file_path=None,
+):
+    plotter_object = Plotter(1, v_axes=2)
+    if gt_available:
+        plotter_object.add_gt_function(np.squeeze(gt_x), np.squeeze(gt_f), "black", 0, v_ax=0)
+        plotter_object.add_gt_function(np.squeeze(gt_x), np.squeeze(gt_fz), "black", 0, v_ax=1)
+    if hasattr(safety_thresholds_lower, '__len__'):
+        plotter_object.add_multiple_hline(safety_thresholds_lower, 0, v_ax=1)
+    else:
+        plotter_object.add_hline(safety_thresholds_lower, "black", 0, v_ax=1)
+    if hasattr(safety_thresholds_upper, '__len__'):
+        plotter_object.add_multiple_hline(safety_thresholds_upper, 0, v_ax=1)
+    else:
+        plotter_object.add_hline(safety_thresholds_upper, "black", 0, v_ax=1)
+    plotter_object.add_datapoints(np.squeeze(x_data), np.squeeze(y_data), "r", 0, v_ax=0)
+    plotter_object.add_datapoints(np.squeeze(x_data), np.squeeze(z_data), "r", 0, v_ax=1)
+    plotter_object.add_datapoints(x_query, y_query, "green", 0, v_ax=0)
+    plotter_object.add_datapoints(x_query, z_query, "green", 0, v_ax=1)
+        
+    plotter_object.add_predictive_dist(np.squeeze(x_grid), np.squeeze(pred_mu_grid), np.squeeze(pred_sigma_grid), 0, v_ax=0)
     if save_plot:
         plotter_object.save_fig(file_path, file_name)
     else:
@@ -133,15 +167,7 @@ def active_learning_1d_plot_multioutput(
 
 
 def active_learning_2d_plot(
-    x_grid,
-    acquisition_values_grid,
-    pred_mu_grid,
-    y_over_grid,
-    x_data,
-    x_query,
-    save_plot=False,
-    file_name=None,
-    file_path=None,
+    x_grid, acquisition_values_grid, pred_mu_grid, y_over_grid, x_data, x_query, save_plot=False, file_name=None, file_path=None
 ):
     plotter_object = Plotter2D(3)
     plotter_object.add_gt_function(x_grid, np.squeeze(acquisition_values_grid), "RdBu_r", 14, 0)
@@ -159,6 +185,68 @@ def active_learning_2d_plot(
     plotter_object.add_gt_function(x_grid, np.squeeze(pred_mu_grid), "seismic", levels, 2)
     plotter_object.add_datapoints(x_data, "black", 2)
     plotter_object.add_datapoints(x_query, "green", 2)
+    if save_plot:
+        plotter_object.save_fig(file_path, file_name)
+    else:
+        plotter_object.show()
+
+
+def active_learning_2d_plot_with_true_safety_measure(
+    x_grid,
+    acquisition_values_grid,
+    safety_score,
+    pred_mu_grid,
+    y_over_grid,
+    z_over_grid,
+    safety_bool_over_grid,
+    x_data,
+    x_query,
+    save_plot=False,
+    file_name=None,
+    file_path=None
+):
+    plotter_object = Plotter2D(4, v_axes=2)
+    if safety_score is not None:
+        plotter_object.add_gt_function(x_grid, np.squeeze(acquisition_values_grid) + np.squeeze(safety_score), "RdBu_r", 14, 0, v_ax=0)
+    else:
+        plotter_object.add_gt_function(x_grid, np.squeeze(acquisition_values_grid), "RdBu_r", 14, 0, v_ax=0)
+    levels = np.array([-0.5, 0.5, 1.5, 2.5])
+    plotter_object.add_gt_function(x_grid, np.squeeze(safety_bool_over_grid), "YlGn", levels, 0, v_ax=1)
+    if len(x_query.shape) == 1:
+        x_query = np.expand_dims(x_query, axis=0)
+    for i in range(2):
+        plotter_object.add_datapoints(x_data, "black", 0, v_ax=i)
+        plotter_object.add_datapoints(x_query, "green", 0, v_ax=i)
+    plotter_object.configure_axes(0, v_ax=0, ax_title='acq_score + safety_score')
+    plotter_object.configure_axes(0, v_ax=1, ax_title='safe region')
+
+    plotter_object.add_gt_function(x_grid, np.squeeze(acquisition_values_grid), "RdBu_r", 14, 1, v_ax=0)
+    if safety_score is not None:
+        plotter_object.add_gt_function(x_grid, np.squeeze(safety_score), "RdBu_r", 14, 1, v_ax=1)
+    for i in range(2):
+        plotter_object.add_datapoints(x_data, "black", 1, v_ax=i)
+        plotter_object.add_datapoints(x_query, "green", 1, v_ax=i)
+    plotter_object.configure_axes(1, v_ax=0, ax_title='acq_score')
+    plotter_object.configure_axes(1, v_ax=1, ax_title='safety_score')
+
+    min_y = np.min(y_over_grid)
+    max_y = np.max(y_over_grid)
+    levels = np.linspace(min_y, max_y, 100)
+    plotter_object.add_gt_function(x_grid, np.squeeze(y_over_grid), "seismic", levels, 2, v_ax=0)
+    min_z = np.min(z_over_grid)
+    max_z = np.max(z_over_grid)
+    levels = np.linspace(min_z, max_z, 100)
+    plotter_object.add_gt_function(x_grid, np.squeeze(z_over_grid), "seismic", levels, 2, v_ax=1)
+    for i in range(2):
+        plotter_object.add_datapoints(x_data, "black", 2, v_ax=i)
+        plotter_object.add_datapoints(x_query, "green", 2, v_ax=i)
+    plotter_object.configure_axes(2, v_ax=0, ax_title='function')
+    plotter_object.configure_axes(2, v_ax=1, ax_title='constraint')
+
+    plotter_object.add_gt_function(x_grid, np.squeeze(pred_mu_grid), "seismic", levels, 3, v_ax=0)
+    plotter_object.add_datapoints(x_data, "black", 3, v_ax=0)
+    plotter_object.add_datapoints(x_query, "green", 3, v_ax=0)
+    plotter_object.configure_axes(3, v_ax=0, ax_title='predictive mean')
     if save_plot:
         plotter_object.save_fig(file_path, file_name)
     else:
@@ -285,8 +373,7 @@ def safe_bayesian_optimization_1d_plot(
         plotter_object = Plotter(1, v_axes=n_row, share_x="all", share_y="all")
         safe_bayesian_optimization_1d_plot_1task(
             plotter_object,
-            0,
-            0,
+            0, 0,
             x_grid,
             acq_score,
             mu,
@@ -312,7 +399,7 @@ def safe_bayesian_optimization_1d_plot(
 
             safe_bayesian_optimization_1d_plot_1task(
                 plotter_object,
-                0 if len(p) == 2 else i,
+                0 if len(p)==2 else i,
                 0,
                 x_grid[x_grid[:, -1] == p_idx, :-1],
                 acq_score[x_grid[:, -1] == p_idx],
@@ -325,7 +412,7 @@ def safe_bayesian_optimization_1d_plot(
                 y_data[x_data[:, -1] == p_idx],
                 safety_data[x_data[:, -1] == p_idx],
                 plug_in_x_query,
-                point_color="black" if p_idx == len(p) - 1 else "y",
+                point_color= "black" if p_idx == len(p)-1 else "y"
             )
 
     elif output_type == OutputType.MULTI_OUTPUT:
@@ -352,15 +439,13 @@ def safe_bayesian_optimization_1d_plot_1task(
     y_data,
     safety_data,
     x_query,
-    point_color="black",
+    point_color="black"
 ):
     plotter_object.add_datapoints(np.squeeze(x_data), np.squeeze(y_data), point_color, ax_num, v_ax=v_ax_num_init)
     if x_query is not None:
         plotter_object.add_vline(x_query, "green", ax_num, v_ax=v_ax_num_init)
     if x_grid.shape[0] > 0:
-        plotter_object.add_confidence_bound(
-            np.squeeze(x_grid), np.squeeze(mu[:, 0]), np.squeeze(std[:, 0]), ax_num, v_ax=v_ax_num_init
-        )
+        plotter_object.add_confidence_bound(np.squeeze(x_grid), np.squeeze(mu[:,0]), np.squeeze(std[:,0]), ax_num, v_ax=v_ax_num_init)
         plotter_object.add_acquisition_score(np.squeeze(x_grid), np.squeeze(acq_score), "c", ax_num, v_ax=v_ax_num_init)
     if mu.shape[1] == 1:  # safety constrained directly on the modeling function
         # plot safety on the same plot as above
@@ -370,19 +455,15 @@ def safe_bayesian_optimization_1d_plot_1task(
         plotter_object.add_query_region(x_grid[safety_mask_grid >= 2], ax_num, v_ax=v_ax_num_init)
     elif len(safety_thresholds_lower) == (mu.shape[1] - 1):  # safety constrained on addition functions
         # plot safety on the next row
-        plotter_object.add_datapoints(
-            np.squeeze(x_data), np.squeeze(safety_data), point_color, ax_num, v_ax=v_ax_num_init + 1
-        )
+        plotter_object.add_datapoints(np.squeeze(x_data), np.squeeze(safety_data), point_color, ax_num, v_ax=v_ax_num_init+1)
         if x_query is not None:
-            plotter_object.add_vline(x_query, "green", ax_num, v_ax=v_ax_num_init + 1)
+            plotter_object.add_vline(x_query, "green", ax_num, v_ax=v_ax_num_init+1)
         if x_grid.shape[0] > 0:
-            plotter_object.add_multiple_confidence_bound(
-                np.squeeze(x_grid), mu[:, 1:], std[:, 1:], ax_num, v_ax=v_ax_num_init + 1
-            )
-            plotter_object.add_multiple_hline(safety_thresholds_lower, ax_num, v_ax=v_ax_num_init + 1)
-            plotter_object.add_multiple_hline(safety_thresholds_upper, ax_num, v_ax=v_ax_num_init + 1)
-            plotter_object.add_safety_region(x_grid[safety_mask_grid >= 1], ax_num, v_ax=v_ax_num_init + 1)
-            plotter_object.add_query_region(x_grid[safety_mask_grid >= 2], ax_num, v_ax=v_ax_num_init + 1)
+            plotter_object.add_multiple_confidence_bound(np.squeeze(x_grid), mu[:,1:], std[:,1:], ax_num, v_ax=v_ax_num_init+1)
+            plotter_object.add_multiple_hline(safety_thresholds_lower, ax_num, v_ax=v_ax_num_init+1)
+            plotter_object.add_multiple_hline(safety_thresholds_upper, ax_num, v_ax=v_ax_num_init+1)
+            plotter_object.add_safety_region(x_grid[safety_mask_grid >= 1], ax_num, v_ax=v_ax_num_init+1)
+            plotter_object.add_query_region(x_grid[safety_mask_grid >= 2], ax_num, v_ax=v_ax_num_init+1)
 
 
 def safe_bayesian_optimization_2d_plot(
@@ -402,16 +483,7 @@ def safe_bayesian_optimization_2d_plot(
     if output_type == OutputType.SINGLE_OUTPUT:
         plotter_object = Plotter2D(4, share_x="all", share_y="all")
         safe_bayesian_optimization_2d_plot_1task(
-            plotter_object,
-            0,
-            x_grid,
-            acquisition_values_grid,
-            pred_mu_grid,
-            y_over_grid,
-            safety_mask_grid,
-            x_data,
-            y_data,
-            x_query,
+            plotter_object, 0, x_grid, acquisition_values_grid, pred_mu_grid, y_over_grid, safety_mask_grid, x_data, y_data, x_query
         )
     elif output_type == OutputType.MULTI_OUTPUT_FLATTENED:
         p = np.unique(x_data[:, -1])
@@ -438,16 +510,7 @@ def safe_bayesian_optimization_2d_plot(
 
 
 def safe_bayesian_optimization_2d_plot_1task(
-    plotter_object,
-    vax,
-    x_grid,
-    acquisition_values_grid,
-    pred_mu_grid,
-    y_over_grid,
-    safety_mask_grid,
-    x_data,
-    y_data,
-    x_query,
+    plotter_object, vax, x_grid, acquisition_values_grid, pred_mu_grid, y_over_grid, safety_mask_grid, x_data, y_data, x_query
 ):
     if x_grid.shape[0] > 0:
         plotter_object.add_gt_function(x_grid, np.squeeze(acquisition_values_grid), "RdBu_r", 14, 0, vax)
@@ -482,6 +545,7 @@ def safe_bayesian_optimization_2d_plot_1task(
         levels = np.array([-0.5, 0.5, 1.5, 2.5])
         plotter_object.add_gt_function(x_grid, np.squeeze(safety_mask_grid), "YlGn", levels, 3, vax)
     plotter_object.add_datapoints(x_data, "black", 3, vax)
+    plotter_object.add_datapoints(x_query, "green", 3, v_ax=vax)
     if x_query is not None:
         plotter_object.add_datapoints(np.atleast_2d(x_query), "red", 3, vax)
 
@@ -561,6 +625,7 @@ def safe_bayesian_optimization_2d_plot_without_gt_1task(
         levels = np.array([-0.5, 0.5, 1.5, 2.5])
         plotter_object.add_gt_function(x_grid, np.squeeze(safety_mask_grid), "YlGn", levels, 2, vax)
     plotter_object.add_datapoints(x_data, "black", 2, vax)
+    plotter_object.add_datapoints(x_query, "green", 2, v_ax=vax)
     if x_query is not None:
         plotter_object.add_datapoints(np.atleast_2d(x_query), "red", 2, vax)
 
@@ -619,9 +684,7 @@ def safe_bayesian_optimization_2d_plot_without_gt_1task_with_only_safepoints(
 ):
     if x_grid.shape[0] > 0:
         mask = np.where(safety_mask_grid, False, True)
-        plotter_object.add_gt_function_with_mask(
-            x_grid, np.squeeze(acquisition_values_grid), mask, "RdBu_r", 14, 0, vax
-        )
+        plotter_object.add_gt_function_with_mask(x_grid, np.squeeze(acquisition_values_grid), mask, "RdBu_r", 14, 0, vax)
 
     plotter_object.add_datapoints(x_data, "black", 0, vax)
     if x_query is not None:
@@ -644,47 +707,35 @@ def safe_bayesian_optimization_2d_plot_without_gt_1task_with_only_safepoints(
     if x_query is not None:
         plotter_object.add_datapoints(np.atleast_2d(x_query), "green", 1, vax)
 
-
 def safety_function_2d_plot(
     output_type: OutputType,
-    x_grid,
-    pred_mu_grid,
-    pred_conf_bound_grid,
-    safety_thresholds_lower,
-    safety_thresholds_upper,
-    x_data,
-    z_data,
+    x_grid, pred_mu_grid, pred_conf_bound_grid,
+    safety_thresholds_lower, safety_thresholds_upper,
+    x_data, z_data,
     save_plot=False,
     file_name=None,
     file_path=None,
 ):
+    
     J = z_data.shape[1]
     plotter_object = Plotter2D(J, 3, share_x="all", share_y="all")
 
-    if output_type == OutputType.SINGLE_OUTPUT:
+    if output_type== OutputType.SINGLE_OUTPUT:
         safety_function_2d_1task_plot(
             plotter_object,
             0,
-            x_grid,
-            pred_mu_grid,
-            pred_conf_bound_grid,
-            safety_thresholds_lower,
-            safety_thresholds_upper,
-            x_data,
-            z_data,
+            x_grid, pred_mu_grid, pred_conf_bound_grid,
+            safety_thresholds_lower, safety_thresholds_upper,
+            x_data, z_data
         )
-    elif output_type == OutputType.MULTI_OUTPUT_FLATTENED:
+    elif output_type==OutputType.MULTI_OUTPUT_FLATTENED:
         p = np.max(x_grid[:, -1])
         safety_function_2d_1task_plot(
             plotter_object,
             0,
-            x_grid[x_grid[:, -1] == p, :-1],
-            pred_mu_grid[x_grid[:, -1] == p, :],
-            pred_conf_bound_grid[x_grid[:, -1] == p, :],
-            safety_thresholds_lower,
-            safety_thresholds_upper,
-            x_data[x_data[:, -1] == p, :-1],
-            z_data[z_data[:, -1] == p, :],
+            x_grid[x_grid[:, -1] == p, :-1], pred_mu_grid[x_grid[:, -1] == p, :], pred_conf_bound_grid[x_grid[:, -1] == p, :],
+            safety_thresholds_lower, safety_thresholds_upper,
+            x_data[x_data[:, -1] == p, :-1], z_data[z_data[:, -1] == p, :]
         )
 
     if save_plot:
@@ -692,54 +743,37 @@ def safety_function_2d_plot(
     else:
         plotter_object.show()
 
-
 def safety_function_2d_1task_plot(
     plotter_object,
     v_ax,
-    x_grid,
-    pred_mu_grid,
-    pred_conf_bound_grid,
-    safety_thresholds_lower,
-    safety_thresholds_upper,
-    x_data,
-    z_data,
+    x_grid, pred_mu_grid, pred_conf_bound_grid,
+    safety_thresholds_lower, safety_thresholds_upper,
+    x_data, z_data
 ):
     J = z_data.shape[1]
     mask = np.logical_and(
-        pred_mu_grid - pred_conf_bound_grid >= safety_thresholds_lower,
-        pred_mu_grid + pred_conf_bound_grid <= safety_thresholds_upper,
+        pred_mu_grid - pred_conf_bound_grid >= safety_thresholds_lower,    
+        pred_mu_grid + pred_conf_bound_grid <= safety_thresholds_upper
     )
     min_z = min(pred_mu_grid.reshape(-1))
     max_z = max(pred_mu_grid.reshape(-1))
     levels = np.linspace(min_z - (max_z - min_z) * 0.05, max_z + (max_z - min_z) * 0.05, 100)
     levels_safety = np.array([-0.5, 0.5, 1.5, 2.5])
     for model_idx in range(J):
-        plotter_object.add_gt_function(
-            x_grid, np.squeeze(pred_mu_grid[..., model_idx]), "seismic", levels, model_idx, v_ax
-        )
+        plotter_object.add_gt_function(x_grid, np.squeeze(pred_mu_grid[..., model_idx]), "seismic", levels, model_idx, v_ax)
         plotter_object.add_datapoints(x_data, "black", model_idx, v_ax)
         plotter_object.configure_axes(model_idx, v_ax, f"model {model_idx} mean, {x_data.shape[0]} points")
 
-        plotter_object.add_gt_function(
-            x_grid, np.squeeze(pred_conf_bound_grid[..., model_idx]), "RdBu_r", 14, model_idx, v_ax + 1
-        )
-        plotter_object.add_datapoints(x_data, "black", model_idx, v_ax + 1)
-        plotter_object.configure_axes(model_idx, v_ax + 1, f"model {model_idx} std, {x_data.shape[0]} points")
+        plotter_object.add_gt_function(x_grid, np.squeeze(pred_conf_bound_grid[..., model_idx]), "RdBu_r", 14, model_idx, v_ax+1)
+        plotter_object.add_datapoints(x_data, "black", model_idx, v_ax+1)
+        plotter_object.configure_axes(model_idx, v_ax+1, f"model {model_idx} std, {x_data.shape[0]} points")
 
-        plotter_object.add_gt_function(
-            x_grid, np.squeeze(mask[:, model_idx]), "YlGn", levels_safety, model_idx, v_ax + 2
-        )
+        plotter_object.add_gt_function(x_grid, np.squeeze(mask[:, model_idx]), "YlGn", levels_safety, model_idx, v_ax+2)
+        plotter_object.add_datapoints(x_data, "black", model_idx, v_ax=v_ax+2)
 
 
 def safety_histogram(
-    output_type: OutputType,
-    x,
-    z,
-    safe_threshold_lower,
-    safe_threshold_upper,
-    save_plot=False,
-    file_name=None,
-    file_path=None,
+    output_type: OutputType, x, z, safe_threshold_lower, safe_threshold_upper, save_plot=False, file_name=None, file_path=None
 ):
     if output_type == OutputType.SINGLE_OUTPUT:
         safety_dim = z.shape[1]
@@ -823,17 +857,13 @@ def plot_model_specifics(x_grid, x_data, model, save_plot=False, file_name=None,
                     == model.model.kernel.feature_extractor.get_output_dimension()
                 )
             if dimension_alligned:
-                warped_kernel_specific_plot(
-                    x_grid, model.model.kernel, save_plot, file_name, file_path, input_dimension
-                )
+                warped_kernel_specific_plot(x_grid, model.model.kernel, save_plot, file_name, file_path, input_dimension)
 
     elif isinstance(model, GPModelMarginalized):
         counter = 0
         for posterior_model in model.yield_posterior_models():
             if counter % 4 == 0:
-                if isinstance(posterior_model.kernel, BaseDeepKernel) or isinstance(
-                    posterior_model.kernel, WarpedKernelInterface
-                ):
+                if isinstance(posterior_model.kernel, BaseDeepKernel) or isinstance(posterior_model.kernel, WarpedKernelInterface):
                     dimension_alligned = True
                     if isinstance(posterior_model.kernel, BaseDeepKernel):
                         dimension_alligned = (
@@ -841,9 +871,7 @@ def plot_model_specifics(x_grid, x_data, model, save_plot=False, file_name=None,
                             == posterior_model.kernel.feature_extractor.get_output_dimension()
                         )
                     if dimension_alligned:
-                        warped_kernel_specific_plot(
-                            x_grid, posterior_model.kernel, save_plot, file_name, file_path, input_dimension
-                        )
+                        warped_kernel_specific_plot(x_grid, posterior_model.kernel, save_plot, file_name, file_path, input_dimension)
             counter += 1
 
 
@@ -871,15 +899,9 @@ def hhk_specific_plot(x_grid, x_data, model, save_plot, file_name, file_path, in
                 if isinstance(model.model.kernel.kernel_list[class_index], RBFKernel):
                     lengthscales = model.model.kernel.kernel_list[class_index].kernel.lengthscales.numpy()
                     variance = model.model.kernel.kernel_list[class_index].kernel.variance.numpy()
-                    plotter_object.add_text_box(
-                        "ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter, v_ax=v_index
-                    )
-                    plotter_object.add_text_box(
-                        "ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter, v_ax=v_index
-                    )
-                    plotter_object.add_text_box(
-                        "var=" + "{:.2f}".format(variance[0]), 0.30, 0.68, 0.5, 17, counter, v_ax=v_index
-                    )
+                    plotter_object.add_text_box("ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter, v_ax=v_index)
+                    plotter_object.add_text_box("ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter, v_ax=v_index)
+                    plotter_object.add_text_box("var=" + "{:.2f}".format(variance[0]), 0.30, 0.68, 0.5, 17, counter, v_ax=v_index)
                 elif isinstance(model.model.kernel.kernel_list[class_index], WeightedAdditiveKernel):
                     weights = model.model.kernel.kernel_list[class_index].get_weights()
                     weight_str = str(["{:.2f}".format(weight) for weight in weights])
@@ -889,19 +911,13 @@ def hhk_specific_plot(x_grid, x_data, model, save_plot, file_name, file_path, in
         else:
             counter = 0
             for class_index in sorted_classes:
-                plotter_object.add_gt_function(
-                    x_grid, np.squeeze(classified_local_kernel[:, class_index]), "plasma", levels, counter
-                )
+                plotter_object.add_gt_function(x_grid, np.squeeze(classified_local_kernel[:, class_index]), "plasma", levels, counter)
                 plotter_object.add_datapoints(x_data, "red", counter)
                 if isinstance(model.model.kernel.kernel_list[class_index], RBFKernel):
                     lengthscales = model.model.kernel.kernel_list[class_index].kernel.lengthscales.numpy()
                     variance = model.model.kernel.kernel_list[class_index].kernel.variance.numpy()
-                    plotter_object.add_text_box(
-                        "ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter
-                    )
-                    plotter_object.add_text_box(
-                        "ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter
-                    )
+                    plotter_object.add_text_box("ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter)
+                    plotter_object.add_text_box("ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter)
                     plotter_object.add_text_box("var=" + "{:.2f}".format(variance[0]), 0.30, 0.68, 0.5, 17, counter)
                 elif isinstance(model.model.kernel.kernel_list[class_index], WeightedAdditiveKernel):
                     weights = model.model.kernel.kernel_list[class_index].get_weights()
@@ -915,7 +931,6 @@ def hhk_specific_plot(x_grid, x_data, model, save_plot, file_name, file_path, in
 
 
 def warped_kernel_specific_plot(x_grid, kernel, save_plot, file_name, file_path, input_dimension):
-    # print_summary(kernel)
     if input_dimension == 1:
         X = x_grid
         if isinstance(kernel, WarpedKernelInterface):
@@ -978,7 +993,7 @@ def create_box_plot_from_dict(
     num_levels = 1
     if isinstance(dictionary[list(dictionary.keys())[0]], dict):
         num_levels = 2
-        list(dictionary[list(dictionary.keys())[0]].keys())
+        second_layer_keys = list(dictionary[list(dictionary.keys())[0]].keys())
     if num_levels == 1:
         data_frame = pd.DataFrame.from_dict(dictionary)
         if bar_plot:
@@ -991,21 +1006,14 @@ def create_box_plot_from_dict(
         for key in dictionary:
             data_frame = pd.DataFrame.from_dict(dictionary[key])
             for inner_key in dictionary[key]:
-                df_inner = (
-                    data_frame[inner_key]
-                    .to_frame(y_name)
-                    .assign(**{key_level1_name: key})
-                    .assign(**{key_level2_name: inner_key})
-                )
+                df_inner = data_frame[inner_key].to_frame(y_name).assign(**{key_level1_name: key}).assign(**{key_level2_name: inner_key})
                 list_of_dfs.append(df_inner)
 
         cdf = pd.concat(list_of_dfs)
         print(cdf.head())
         if swap_key:
             if bar_plot:
-                ax = sns.barplot(
-                    x=key_level2_name, y=y_name, hue=key_level1_name, data=cdf, estimator="median", errorbar=("pi", 60)
-                )
+                ax = sns.barplot(x=key_level2_name, y=y_name, hue=key_level1_name, data=cdf, estimator="median", errorbar=("pi", 60))
             else:
                 ax = sns.boxplot(x=key_level2_name, y=y_name, hue=key_level1_name, data=cdf, showfliers=showfliers)
         else:
@@ -1029,3 +1037,23 @@ def create_box_plot_from_dict(
         plt.clf()
         plt.close()
     return None
+
+
+if __name__ == "__main__":
+    df_dict = {}
+    df_dict["data1"] = {}
+    df_dict["data1"]["method1"] = np.random.randn(100)
+    df_dict["data1"]["method2"] = np.random.randn(100)
+    df_dict["data2"] = {}
+    df_dict["data2"]["method1"] = np.random.randn(100)
+    df_dict["data2"]["method2"] = np.random.randn(100)
+    df_dict["data3"] = {}
+    df_dict["data3"]["method1"] = np.random.randn(100)
+    df_dict["data3"]["method2"] = np.random.randn(100)
+    df_dict["data4"] = {}
+    df_dict["data4"]["method1"] = np.random.randn(100)
+    df_dict["data4"]["method2"] = np.random.randn(100)
+    df_dict["data5"] = {}
+    df_dict["data5"]["method1"] = np.random.randn(100)
+    df_dict["data5"]["method2"] = np.random.randn(100)
+    create_box_plot_from_dict(df_dict, "random", "data", "method", swap_key=True)

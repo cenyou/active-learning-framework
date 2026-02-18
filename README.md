@@ -182,11 +182,14 @@ If you use our software in your scientific work, please cite one of our papers:
 }
 ```
 ```
-@article{li2024global,
-  title={Global Safe Sequential Learning via Efficient Knowledge Transfer},
-  author={Li, Cen-You and Duennbier, Olaf and Toussaint, Marc and Rakitsch, Barbara and Zimmer, Christoph},
-  journal={arXiv preprint arXiv:2402.14402},
-  year={2024}
+@article{
+li2025global,
+title={Global Safe Sequential Learning via Efficient Knowledge Transfer},
+author={Cen-You Li and Olaf D{\"u}nnbier and Marc Toussaint and Barbara Rakitsch and Christoph Zimmer},
+journal={Transactions on Machine Learning Research},
+issn={2835-8856},
+year={2025},
+url={https://openreview.net/forum?id=PtD2gVmb3J},
 }
 ```
 ```
@@ -195,5 +198,15 @@ If you use our software in your scientific work, please cite one of our papers:
   author={Li, Cen-You and Toussaint, Marc and Rakitsch, Barbara and Zimmer, Christoph},
   journal={arXiv preprint arXiv:2407.17992},
   year={2024}
+}
+```
+```
+@inproceedings{
+li2026amortized,
+title={Amortized Safe Active Learning for Real-Time Data Acquisition: Pretrained Neural Policies from Simulated Nonparametric Functions},
+author={Cen-You Li and Marc Toussaint and Barbara Rakitsch and Christoph Zimmer},
+booktitle={International Conference on Artificial Intelligence and Statistics},
+year={2026},
+url={https://openreview.net/forum?id=WWrdo1tfdw}
 }
 ```

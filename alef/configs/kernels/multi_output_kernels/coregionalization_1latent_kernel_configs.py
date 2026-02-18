@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import Tuple, Dict
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 from alef.configs.base_parameters import (
@@ -19,21 +20,22 @@ from alef.configs.base_parameters import (
     BASE_KERNEL_LENGTHSCALE,
 )
 
-
 class BasicCoregionalization1LConfig(BaseKernelConfig):
     base_variance: float = BASE_KERNEL_VARIANCE
     base_lengthscale: float = BASE_KERNEL_LENGTHSCALE
-    W_rank: int = 2
+    W_rank:int=2
     input_dimension: int
     output_dimension: int
     add_prior: bool = False
-    lengthscale_prior_parameters = (1, 9)  # gamma mean
-    variance_prior_parameters = (1, 0.3)  # truncated normal
+    lengthscale_prior_parameters= (1, 9) # gamma mean
+    variance_prior_parameters= (1, 0.3) # truncated normal
     latent_kernel: LatentKernel = LatentKernel.MATERN52
-    active_on_single_dimension: bool = False
-    active_dimension: int = None
-    name: str = "BasicCoregion1L"
-
+    active_on_single_dimension: bool=False
+    active_dimension: int=None
+    name:str='BasicCoregion1L'
+    fix_kernel: bool=False
+    assign_values: bool=False
+    parameter_values: Dict={}
 
 class Coregionalization1LWithPriorConfig(BasicCoregionalization1LConfig):
     add_prior: bool = True

@@ -12,19 +12,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import List
 
 import numpy as np
 import tensorflow as tf
 from alef.configs.kernels.linear_configs import LinearWithPriorConfig
 from alef.configs.kernels.rbf_configs import BasicRBFConfig
-from alef.kernels.kernel_grammar.kernel_grammar import (
-    BaseKernelGrammarExpression,
-    ElementaryKernelGrammarExpression,
-    KernelGrammarExpression,
-    KernelGrammarOperator,
-)
+from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, ElementaryKernelGrammarExpression, KernelGrammarExpression, KernelGrammarOperator
 from alef.kernels.linear_kernel import LinearKernel
 from alef.kernels.rbf_kernel import RBFKernel
 from sklearn.linear_model import LinearRegression
@@ -46,9 +41,6 @@ class LinearTimePredictorKernelParameters(BaseDurationTimePredictorObjects):
         self.use_log = True
 
     def fit(self, x_data: List[BaseKernelGrammarExpression], duration_times: List[float]):
-        """
-        Fit the model to the data.
-        """
         duration_times = np.array(duration_times)
         n_params = self.get_n_params(x_data)
         if self.use_log:
@@ -64,9 +56,6 @@ class LinearTimePredictorKernelParameters(BaseDurationTimePredictorObjects):
             plotter.show()
 
     def predict(self, x_test: List[BaseKernelGrammarExpression]) -> np.array:
-        """
-        Predict the duration times for the test data.
-        """
         n_params = self.get_n_params(x_test)
         prediction = self.regressor.predict(n_params)
         if self.use_log:
@@ -74,25 +63,15 @@ class LinearTimePredictorKernelParameters(BaseDurationTimePredictorObjects):
         return prediction
 
     def get_n_params(self, X: List[BaseKernelGrammarExpression]):
-        """
-        Get the number of parameters for each kernel expression.
-        """
-        n_params = [
-            tf.add_n([tf.size(tensor) for tensor in kernel_grammar_expression.get_kernel().trainable_variables])
-            for kernel_grammar_expression in X
-        ]
+        n_params = [tf.add_n([tf.size(tensor) for tensor in kernel_grammar_expression.get_kernel().trainable_variables]) for kernel_grammar_expression in X]
         return np.expand_dims(np.array(n_params), axis=1)
 
 
 if __name__ == "__main__":
     predictor = LinearTimePredictorKernelParameters()
     base_expression_1 = ElementaryKernelGrammarExpression(RBFKernel(**BasicRBFConfig(input_dimension=2).dict()))
-    base_expression_2 = ElementaryKernelGrammarExpression(
-        LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict())
-    )
-    base_expression_3 = ElementaryKernelGrammarExpression(
-        LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict())
-    )
+    base_expression_2 = ElementaryKernelGrammarExpression(LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict()))
+    base_expression_3 = ElementaryKernelGrammarExpression(LinearKernel(**LinearWithPriorConfig(input_dimension=2).dict()))
     base_expression_4 = ElementaryKernelGrammarExpression(RBFKernel(**BasicRBFConfig(input_dimension=2).dict()))
     expression1 = KernelGrammarExpression(base_expression_2, base_expression_2, operator=KernelGrammarOperator.ADD)
     expression2 = KernelGrammarExpression(base_expression_3, base_expression_4, operator=KernelGrammarOperator.SPLIT_CH)

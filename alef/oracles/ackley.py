@@ -16,15 +16,21 @@ import math
 import numpy as np
 from alef.oracles.base_oracle import StandardOracle
 
-
 class Ackley(StandardOracle):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
     def __init__(
-        self, observation_noise: float, dimension: int = 4, constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])
+        self,
+        observation_noise: float,
+        dimension: int = 4,
+        constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])
     ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param dimension: dimension of the input space
+        :param constants: the constants of the Ackley function
+        """
         self._constants = np.squeeze(constants)
         assert self._constants.shape == (3,)
         super().__init__(observation_noise, 0.0, 1.0, dimension)
@@ -44,9 +50,10 @@ class Ackley(StandardOracle):
         assert len(x) == D
         x_ = self.x_scale(x)
         a, b, c = self._constants
-        out = -a * np.exp(-b * np.sqrt(np.sum(x_**2) / D)) - np.exp(np.sum(np.cos(c * x_)) / D) + a + math.e + np.exp(1)
+        out = -a * np.exp(-b * np.sqrt(np.sum(x_**2) / D)) - \
+            np.exp(np.sum(np.cos(c * x_)) / D) + a + math.e + np.exp(1)
         return out
-
+    
     def return_minimum(self):
         D = self.get_dimension()
         x_min_scaled = np.zeros(D, type=float)
@@ -54,31 +61,42 @@ class Ackley(StandardOracle):
         x_min = (x_min_scaled + 32.768) / 65.536 * (b - a) + a
         return (x_min, 0)
 
-    def query(self, x, noisy=True):
+    def query(self,x,noisy=True):
         function_value = self.f(x)
         if noisy:
-            epsilon = np.random.normal(0, self.observation_noise, 1)[0]
+            epsilon = np.random.normal(0,self.observation_noise,1)[0]
             function_value += epsilon
         return function_value
-
 
 class Ackley3D(Ackley):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
-    def __init__(self, observation_noise: float, constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])):
+    def __init__(
+        self,
+        observation_noise: float,
+        constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])
+    ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param constants: the constants of the Ackley function
+        """
         super().__init__(observation_noise, 3, constants=constants)
-
 
 class Ackley4D(Ackley):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
-    def __init__(self, observation_noise: float, constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])):
+    def __init__(
+        self,
+        observation_noise: float,
+        constants: np.ndarray = np.array([20.0, 0.2, 2 * math.pi])
+    ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param constants: the constants of the Ackley function
+        """
         super().__init__(observation_noise, 4, constants=constants)
-
 
 if __name__ == "__main__":
     oracle = Ackley4D(0.01)

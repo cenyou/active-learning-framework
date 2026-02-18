@@ -13,15 +13,21 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Tuple, Union, Sequence
+from alef.configs.kernels.pytorch_kernels.base_kernel_pytorch_config import BaseKernelPytorchConfig
 from alef.configs.kernels.pytorch_kernels.elementary_kernels_pytorch_configs import BaseElementaryKernelPytorchConfig
 from alef.configs.base_parameters import (
     BASE_KERNEL_VARIANCE,
     BASE_KERNEL_LENGTHSCALE,
+    BASE_LINEAR_KERNEL_OFFSET,
+    BASE_RQ_KERNEL_ALPHA,
+    BASE_KERNEL_PERIOD,
 )
 from alef.configs.prior_parameters import (
     KERNEL_LENGTHSCALE_GAMMA,
     KERNEL_VARIANCE_GAMMA,
     PERIODIC_KERNEL_PERIOD_GAMMA,
+    LINEAR_KERNEL_OFFSET_GAMMA,
+    RQ_KERNEL_ALPHA_GAMMA,
 )
 
 
@@ -37,9 +43,11 @@ class BasicSpectralMixturePytorchConfig(BaseElementaryKernelPytorchConfig):
     spectral_scale_prior_parameters: Tuple[float, float] = KERNEL_LENGTHSCALE_GAMMA
     spectral_mean_prior_parameters: Tuple[float, float] = PERIODIC_KERNEL_PERIOD_GAMMA
     weight_prior_parameters: Tuple[float, float] = KERNEL_VARIANCE_GAMMA
-    name: str = "BasicSpectralMixture"
+    name: str= "BasicSpectralMixture"
 
 
 class SpectralMixtureWithPriorPytorchConfig(BasicSpectralMixturePytorchConfig):
     add_prior: bool = True
     name = "SpectralMixturewithPrior"
+
+

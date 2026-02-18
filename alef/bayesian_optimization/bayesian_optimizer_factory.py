@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Union
-from alef.acquisition_function.acquisition_function_factory import AcquisitionFunctionFactory
+from alef.acquisition_functions.acquisition_function_factory import AcquisitionFunctionFactory
 from alef.bayesian_optimization.bayesian_optimizer import BayesianOptimizer
 from alef.bayesian_optimization.bayesian_optimizer_objects import BayesianOptimizerObjects
 
@@ -24,9 +24,6 @@ from alef.configs.bayesian_optimization.bayesian_optimizer_objects_configs impor
 class BayesianOptimizerFactory:
     @staticmethod
     def build(bayesian_optimizer_config: Union[BaseBOConfig, BaseObjectBOConfig]):
-        """
-        Build a Bayesian optimizer based on the configuration.
-        """
         if isinstance(bayesian_optimizer_config, BaseBOConfig):
             acquisition_function_config = bayesian_optimizer_config.acquisition_function_config
             acquisition_function = AcquisitionFunctionFactory.build(acquisition_function_config)
@@ -34,6 +31,4 @@ class BayesianOptimizerFactory:
         elif isinstance(bayesian_optimizer_config, BaseObjectBOConfig):
             acquisition_function_config = bayesian_optimizer_config.acquisition_function_config
             acquisition_function = AcquisitionFunctionFactory.build(acquisition_function_config)
-            return BayesianOptimizerObjects(
-                acquisition_function=acquisition_function, **bayesian_optimizer_config.dict()
-            )
+            return BayesianOptimizerObjects(acquisition_function=acquisition_function, **bayesian_optimizer_config.dict())

@@ -17,47 +17,64 @@ from typing import Tuple, Union, Sequence
 from abc import ABC, abstractmethod
 from alef.enums.data_structure_enums import OutputType
 
-
 class BasePoolWithSafety(ABC):
-    def __init__(self):
+
+    def __init__(self, safety_dimension: int=1):
         super().__init__()
         self.output_type = OutputType.SINGLE_OUTPUT
+        self.safety_dimension = safety_dimension
         self._with_replacement = False
         self._query_non_exist_points = False
-
+    
     def get_replacement(self):
         return self._with_replacement
-
-    def set_replacement(self, with_replacement: bool):
+    
+    def set_replacement(self,with_replacement: bool):
         self._with_replacement = with_replacement
-
+        
     def get_query_non_exist(self):
         return self._query_non_exist_points
 
-    def set_query_non_exist(self, query_non_exist_points: bool):
+    def set_query_non_exist(self, query_non_exist_points:bool):
         self._query_non_exist_points = query_non_exist_points
 
-    def load_data(self, X_path: str, Y_path: str, Z_path: str):
-        X = np.loadtxt(X_path)
-        Y = np.loadtxt(Y_path)
-        Z = np.loadtxt(Z_path)
-        return np.atleast_2d(X), np.atleast_2d(Y), np.atleast_2d(Z)
-
     @abstractmethod
-    def query(self, x: np.ndarray) -> np.float:
+    def query(self,x : np.ndarray, noisy: bool) -> Tuple[float, np.ndarray]:
         """
-        Queries the pool at location x and gets back the value
-
+        Queries the pool at location x and gets back the values
+        
         Arguments:
             x : np.array - np.arry with dimension (d,) where d is the input dimension
+            noisy : bool - flag if noise should be added
         Returns:
-            np.float - value of pool at location x
+            float - functional value of pool at location x
             np.array - safety values at location x, dim (q,)
         """
         raise NotImplementedError
 
+    def batch_query(self, X: np.ndarray, noisy: bool) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Queries the pool at location x and gets back the values
+
+        Arguments:
+            X : np.array - np.arry with dimension (n,d) where n is the number of queries and d is the input dimension
+            noisy : bool - flag if noise should be added
+        Returns:
+            np.array - [n, ] array - functional values of pool at location X
+            np.array - [n, q] array - safety values at location X
+        """
+        N = X.shape[0]
+        q = self.safety_dimension
+        Y = []
+        Z = []
+        for i in range(N):
+            y, z = self.query(X[..., i, :], noisy)
+            Y.append(y)
+            Z.append(z.reshape(1, q))
+        return np.array(Y), np.concatenate(Z, axis=-2)
+
     @abstractmethod
-    def get_random_data(self, n: int, noisy: bool) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_random_data(self,n : int, noisy : bool) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Generates random n uniform random queries, return the queries and pool values
 
@@ -73,8 +90,11 @@ class BasePoolWithSafety(ABC):
 
     @abstractmethod
     def get_random_data_in_box(
-        self, n: int, a: Union[float, Sequence[float]], box_width: Union[float, Sequence[float]], noisy: bool = True
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        self, n: int,
+        a: Union[float, Sequence[float]],
+        box_width: Union[float, Sequence[float]],
+        noisy:bool=True
+    ) -> Tuple[np.ndarray, np.ndarray , np.ndarray]:
         """
         Generates random n uniform random queries inside the specified box bounds and return the queries and pool values
 
@@ -92,12 +112,11 @@ class BasePoolWithSafety(ABC):
 
     @abstractmethod
     def get_random_constrained_data(
-        self,
-        n: int,
-        noisy: bool,
+        self, n : int,
+        noisy : bool,
         constraint_lower: Union[float, Sequence[float]],
-        constraint_upper: Union[float, Sequence[float]],
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        constraint_upper: Union[float, Sequence[float]]
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Generates random n uniform random queries where the output satisfies the constraints, return the queries and pool values
 
@@ -115,13 +134,12 @@ class BasePoolWithSafety(ABC):
 
     @abstractmethod
     def get_random_constrained_data_in_box(
-        self,
-        n: int,
+        self, n: int,
         a: Union[float, Sequence[float]],
         box_width: Union[float, Sequence[float]],
-        noisy: bool,
+        noisy:bool,
         constraint_lower: Union[float, Sequence[float]],
-        constraint_upper: Union[float, Sequence[float]],
+        constraint_upper: Union[float, Sequence[float]]
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Generates random n uniform random queries inside the specified box bounds
@@ -149,7 +167,7 @@ class BasePoolWithSafety(ABC):
         return input dimension
         """
         raise NotImplementedError
-
+    
     def get_variable_dimension(self):
         """
         Returns variable dimension of input in the pool
@@ -166,3 +184,4 @@ class BasePoolWithSafety(ABC):
         return possible input as np.ndarray
         """
         raise NotImplementedError
+

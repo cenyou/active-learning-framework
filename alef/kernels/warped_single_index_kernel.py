@@ -15,7 +15,11 @@
 import gpflow
 from gpflow.utilities import positive
 import tensorflow as tf
+import tensorflow_probability as tfp
+from tensorflow_probability import distributions as tfd
 import numpy as np
+import matplotlib.pyplot as plt
+import copy
 
 from alef.kernels.warped_kernel_interface import WarpedKernelInterface
 
@@ -26,15 +30,7 @@ f64 = gpflow.utilities.to_default_float
 
 
 class WarpedSingleIndexKernel(gpflow.kernels.Kernel, WarpedKernelInterface):
-    def __init__(
-        self,
-        base_alpha: float,
-        base_beta: float,
-        input_dimension: int,
-        base_lengthscale: float,
-        base_variance: float,
-        **kwargs,
-    ):
+    def __init__(self, base_alpha: float, base_beta: float, input_dimension: int, base_lengthscale: float, base_variance: float, **kwargs):
         super().__init__()
         dimension = input_dimension
         alphas = np.full(dimension, base_alpha)

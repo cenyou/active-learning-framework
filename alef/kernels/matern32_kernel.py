@@ -13,16 +13,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import gpflow
-from typing import Tuple, Union, Sequence
-from gpflow.utilities import set_trainable
+from typing import Tuple, Union, List, Sequence
+from gpflow.utilities import print_summary, set_trainable
 import numpy as np
 
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 from alef.kernels.scale_interface import StationaryKernelGPflow
-from tensorflow_probability import distributions as tfd
 
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
+from tensorflow_probability import distributions as tfd
 
 
 class Matern32Kernel(BaseElementaryKernel, StationaryKernelGPflow):
@@ -42,7 +42,7 @@ class Matern32Kernel(BaseElementaryKernel, StationaryKernelGPflow):
         **kwargs,
     ):
         super().__init__(input_dimension, active_on_single_dimension, active_dimension, name)
-        if hasattr(base_lengthscale, "__len__"):
+        if hasattr(base_lengthscale, '__len__'):
             if len(base_lengthscale) == 1:
                 lg = f64(np.repeat(base_lengthscale[0], self.num_active_dimensions))
             else:
@@ -50,17 +50,17 @@ class Matern32Kernel(BaseElementaryKernel, StationaryKernelGPflow):
                 lg = f64(base_lengthscale)
         else:
             lg = f64(np.repeat(base_lengthscale, self.num_active_dimensions))
-
+        
         self.kernel = gpflow.kernels.Matern32(
             lengthscales=lg,
             variance=f64([base_variance]),
         )
 
         if fix_lengthscale:
-            set_trainable(self.kernel.lengthscales, False)
+            set_trainable( self.kernel.lengthscales, False)
         if fix_variance:
-            set_trainable(self.kernel.variance, False)
-
+            set_trainable( self.kernel.variance, False)
+        
         if add_prior:
             a_lengthscale, b_lengthscale = lengthscale_prior_parameters
             a_variance, b_variance = variance_prior_parameters

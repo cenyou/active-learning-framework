@@ -14,6 +14,7 @@
 
 from alef.configs.models.base_model_config import BaseModelConfig
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
+from alef.configs.kernels.hhk_configs import HHKEightLocalDefaultConfig
 from alef.enums.global_model_enums import InitialParameters, PredictionQuantity
 from alef.configs.prior_parameters import EXPECTED_OBSERVATION_NOISE
 

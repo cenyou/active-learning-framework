@@ -16,12 +16,11 @@ import gpflow
 from typing import Tuple
 import numpy as np
 
+gpflow.config.set_default_float(np.float64)
+f64 = gpflow.utilities.to_default_float
 from tensorflow_probability import distributions as tfd
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 from alef.kernels.scale_interface import StationaryKernelGPflow
-
-gpflow.config.set_default_float(np.float64)
-f64 = gpflow.utilities.to_default_float
 
 
 class RationalQuadraticKernel(BaseElementaryKernel, StationaryKernelGPflow):
@@ -41,11 +40,7 @@ class RationalQuadraticKernel(BaseElementaryKernel, StationaryKernelGPflow):
         **kwargs,
     ):
         super().__init__(input_dimension, active_on_single_dimension, active_dimension, name)
-        self.kernel = gpflow.kernels.RationalQuadratic(
-            lengthscales=f64(np.repeat(base_lengthscale, self.num_active_dimensions)),
-            variance=f64([base_variance]),
-            alpha=f64([base_alpha]),
-        )
+        self.kernel = gpflow.kernels.RationalQuadratic(lengthscales=f64(np.repeat(base_lengthscale, self.num_active_dimensions)), variance=f64([base_variance]), alpha=f64([base_alpha]))
         if add_prior:
             a_lengthscale, b_lengthscale = lengthscale_prior_parameters
             a_variance, b_variance = variance_prior_parameters
@@ -55,4 +50,4 @@ class RationalQuadraticKernel(BaseElementaryKernel, StationaryKernelGPflow):
                 f64(np.repeat(b_lengthscale, self.num_active_dimensions)),
             )
             self.kernel.variance.prior = tfd.Gamma(f64([a_variance]), f64([b_variance]))
-            self.kernel.alpha.prior = tfd.Gamma(f64([a_alpha]), f64([b_alpha]))
+            self.kernel.alpha.prior = tfd.Gamma(f64([a_alpha]),f64([b_alpha]))

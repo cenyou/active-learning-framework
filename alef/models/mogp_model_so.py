@@ -15,23 +15,25 @@
 import numpy as np
 import time
 import traceback
-from typing import Tuple, Optional
+from typing import Union, Sequence, List, Tuple, Optional
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 import gpflow
 from gpflow.utilities import print_summary, set_trainable
+from gpflow.kernels import Kernel, MultioutputKernel
 from scipy.stats import norm
 
+from alef.utils.utils import normal_entropy
 from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.models.base_model import BaseModel
-from alef.models.mo_gpr_so import SOMOGPR
+from alef.models.mo_gpr_so import SOMOGPR, SOMOGPC_Binary
 from alef.kernels.multi_output_kernels.base_multioutput_flattened_kernel import BaseMultioutputFlattenedKernel
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
-from alef.enums.global_model_enums import PredictionQuantity, InitialParameters
+from alef.enums.global_model_enums import InitializationType, PredictionQuantity, InitialParameters
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
-
+logger = getLogger(__name__)
 
 class SOMOGPModel(BaseModel):
     """
@@ -63,7 +65,8 @@ class SOMOGPModel(BaseModel):
         n_starts_for_multistart_opt: int = 5,
         set_prior_on_observation_noise=False,
         prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_F,
-        **kwargs,
+        classification: bool = False,
+        **kwargs
     ):
         self.kernel = kernel
         self.kernel_copy = gpflow.utilities.deepcopy(kernel)
@@ -73,8 +76,8 @@ class SOMOGPModel(BaseModel):
         self.optimize_hps = optimize_hps
         self.train_likelihood_variance = train_likelihood_variance
         self.use_mean_function = False
-        self.last_opt_time = None
-        self.last_multi_start_opt_time = None
+        self.last_opt_time = 0
+        self.last_multi_start_opt_time = 0
         self.sample_initial_parameters_at_start = sample_initial_parameters_at_start
         self.initial_parameter_strategy = initial_parameter_strategy
         self.perform_multi_start_optimization = perform_multi_start_optimization
@@ -87,6 +90,7 @@ class SOMOGPModel(BaseModel):
         self.n_starts_for_multistart_opt = n_starts_for_multistart_opt
         self.set_prior_on_observation_noise = set_prior_on_observation_noise
         self.prediction_quantity = prediction_quantity
+        self.classification = classification
         self.print_summaries = False
         if isinstance(kernel, RegularizedKernelInterface):
             self.add_kernel_hp_regularizer = True
@@ -95,12 +99,10 @@ class SOMOGPModel(BaseModel):
 
     def assign_likelihood_variance(self):
         new_value = np.power(self.observation_noise, 2.0)
-        if hasattr(new_value, "__len__"):
-            for i, lik in enumerate(self.model.likelihood.likelihoods):
-                lik.variance.assign(new_value[i])
-        else:
-            for lik in self.model.likelihood.likelihoods:
-                lik.variance.assign(new_value)
+        for i in range(self.kernel.output_dimension):
+            lik = self.model.likelihood.likelihoods[i]
+            v = new_value[i] if hasattr(new_value, '__len__') else new_value
+            lik.variance.assign(v)
 
     def reset_model(self):
         """
@@ -130,38 +132,44 @@ class SOMOGPModel(BaseModel):
         """
         self.n_starts_for_multistart_opt = n_starts
 
-    def infer(self, x_data: np.array, y_data: np.array):
+    def set_model_data(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
+        assert hasattr(self, 'model')
+        assert isinstance(self.model, (SOMOGPR, SOMOGPC_Binary))
+        yy = y_data
+        yy = np.hstack((yy[..., :1], x_data[..., -1, None]))
+        if self.classification:
+            class_mask = np.zeros_like(y_data, dtype=bool)[..., 0] if class_mask is None else class_mask
+            yy[class_mask, -1] = self.kernel.output_dimension
+        self.model.data = gpflow.models.util.data_input_to_tensor((x_data, yy))
+
+    def infer(self, x_data: np.array, y_data: np.array, class_mask: np.array=None):
         """
         Main entrance method for learning the model - training methods are called if hp should be done otherwise only gpflow model is build
 
         Arguments:
             x_data: Input array with shape (n,d+1) where d is the input dimension and n the number of training points
             y_data: Label array with shape (n,1) where n is the number of training points
+            class_mask [n] bool array, y_data[class_mask] is class label while y_data[~class_mask] is regression observation
         """
         yy = y_data
         yy = np.hstack((yy[..., :1], x_data[..., -1, None]))
-        model = SOMOGPR
+        if not self.classification:
+            model = SOMOGPR
+        else:
+            class_mask = np.zeros_like(y_data, dtype=bool)[..., 0] if class_mask is None else class_mask
+            yy[class_mask, -1] = self.kernel.output_dimension
+            model = SOMOGPC_Binary
+        
         if self.use_mean_function:
-            self.model = model(
-                data=(x_data, yy),
-                kernel=self.kernel,
-                mean_function=self.mean_function,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
+            self.model = model(data=(x_data, yy), kernel=self.kernel, mean_function=self.mean_function, noise_variance=np.power(self.observation_noise, 2.0))
             set_trainable(self.model.mean_function.c, False)
         else:
-            self.model = model(
-                data=(x_data, yy),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
-
-        for lik in self.model.likelihood.likelihoods:
+            self.model = model(data=(x_data, yy), kernel=self.kernel, mean_function=None, noise_variance=np.power(self.observation_noise, 2.0))
+        
+        for i in range(self.kernel.output_dimension):
+            lik = self.model.likelihood.likelihoods[i]
             set_trainable(lik.variance, self.train_likelihood_variance)
-
-        if self.set_prior_on_observation_noise:
-            for lik in self.model.likelihood.likelihoods:
+            if self.set_prior_on_observation_noise:
                 lik.variance.prior = tfd.Exponential(1 / np.power(self.expected_observation_noise, 2.0))
 
         if self.optimize_hps:
@@ -185,7 +193,7 @@ class SOMOGPModel(BaseModel):
 
         optimizer = gpflow.optimizers.Scipy()
         optimization_success = False
-        while not optimization_success:
+        while not optimization_success and len(self.model.trainable_variables) > 0:
             try:
                 time_before_opt = time.perf_counter()
                 opt_res = optimizer.minimize(self.model.training_loss, self.model.trainable_variables)
@@ -234,7 +242,7 @@ class SOMOGPModel(BaseModel):
     def print_model_summary(self):
         if logger.isEnabledFor(logging.DEBUG):
             print_summary(self.model)
-
+    
     def multi_start_optimization(self, n_starts: int):
         """
         Method for performing optimization (Type-2 ML) of kernel hps with multiple initial values - self.optimzation method is
@@ -255,7 +263,7 @@ class SOMOGPModel(BaseModel):
                 opt_time = 0.0
                 self.multi_start_losses = []
                 for i in range(0, n_starts):
-                    logger.info(f"Optimization repeat {i + 1}/{n_starts}")
+                    logger.debug(f"Optimization repeat {i+1}/{n_starts}")
                     self.optimize()
                     after_optim = time.perf_counter()
                     loss = self.training_loss()
@@ -264,10 +272,10 @@ class SOMOGPModel(BaseModel):
                     after_loss_calc = time.perf_counter()
                     opt_time += self.get_last_opt_time() + (after_loss_calc - after_optim)
                     if self.add_kernel_hp_regularizer:
-                        logger.info(f"Loss for run: {loss}")
+                        logger.debug(f"Loss for run: {loss}")
                     else:
                         log_marginal_likelihood = -1 * loss
-                        logger.info(f"Log marginal likeli for run: {log_marginal_likelihood}")
+                        logger.debug(f"Log marginal likeli for run: {log_marginal_likelihood}")
                 self.parameter_cache.load_best_parameters_to_model(self.model)
                 self.last_multi_start_opt_time = opt_time
                 logger.debug("Chosen parameter values:")
@@ -282,21 +290,24 @@ class SOMOGPModel(BaseModel):
             except:
                 logger.error("Error in multistart optimization - repeat")
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None, class_mask: Optional[np.array] = None) -> float:
         """
         Estimates the model evidence - always retrieves marg likelihood, also when HPs are provided with prior!!
 
         Arguments:
             x_data: (only necessary if infer was not yet called) Input array with shape (n,d) where d is the input dimension and n the number of training points
             y_data: (only necessary if infer was not yet called) Label array with shape (n,1) where n is the number of training points
+            class_mask: (n,) bool array, y_data[class_mask] is binary class (0 or 1) and y_data[~class_mask] is regression value
 
         Returns:
             marginal likelihood value of infered model
         """
         if self.model is None and x_data is not None and y_data is not None:
-            self.infer(x_data, y_data)
-        model_evidence = self.model.log_marginal_likelihood().numpy()
-        return model_evidence
+            self.infer(x_data, y_data, class_mask)
+        if isinstance(self.model, SOMOGPR):
+            return self.model.log_marginal_likelihood().numpy()
+        else: # SOMOGPC_Binary
+            return self.model.elbo().numpy()
 
     def pertube_parameters(self, factor_bound: float):
         """
@@ -312,9 +323,7 @@ class SOMOGPModel(BaseModel):
             unconstrained_value = variable.numpy()
             factor = 1 + np.random.uniform(-1 * factor_bound, factor_bound, size=unconstrained_value.shape)
             if np.isclose(unconstrained_value, 0.0, rtol=1e-07, atol=1e-09).all():
-                new_unconstrained_value = (
-                    unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)
-                ) * factor
+                new_unconstrained_value = (unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)) * factor
             else:
                 new_unconstrained_value = unconstrained_value * factor
             new_unconstrained_value = np.random.uniform(-10, 10, size=unconstrained_value.shape)
@@ -328,9 +337,7 @@ class SOMOGPModel(BaseModel):
             elif parameter.name == "softplus":
                 sample = tfd.Uniform(low=1e-9, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             else:
-                sample = tfd.Uniform(
-                    low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound
-                ).sample(sample_shape=shape)
+                sample = tfd.Uniform(low=self.initial_uniform_lower_bound, high=self.initial_uniform_upper_bound).sample(sample_shape=shape)
             parameter.assign(sample.numpy())
 
     def predictive_dist(self, x_test: np.array) -> Tuple[np.array, np.array]:
@@ -369,7 +376,7 @@ class SOMOGPModel(BaseModel):
 
         return entropy
 
-    def calculate_complete_information_gain(self, x_data: np.array) -> np.float:
+    def calculate_complete_information_gain(self, x_data: np.array) -> float:
         raise NotImplementedError
 
     def predictive_log_likelihood(self, x_test: np.array, y_test: np.array) -> np.array:

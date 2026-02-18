@@ -14,6 +14,7 @@
 
 from typing import Tuple, Union, Sequence
 from alef.configs.kernels.base_elementary_kernel_config import BaseElementaryKernelConfig
+from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.configs.base_parameters import (
     BASE_KERNEL_VARIANCE,
     BASE_KERNEL_LENGTHSCALE,
@@ -21,6 +22,9 @@ from alef.configs.base_parameters import (
 from alef.configs.prior_parameters import (
     KERNEL_LENGTHSCALE_GAMMA,
     KERNEL_VARIANCE_GAMMA,
+    PERIODIC_KERNEL_PERIOD_GAMMA,
+    LINEAR_KERNEL_OFFSET_GAMMA,
+    RQ_KERNEL_ALPHA_GAMMA,
 )
 
 

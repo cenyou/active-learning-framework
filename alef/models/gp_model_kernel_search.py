@@ -17,7 +17,7 @@ from typing import Optional, Tuple
 import numpy as np
 from alef.bayesian_optimization.bayesian_optimizer_factory import BayesianOptimizerFactory
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
-from alef.configs.models.gp_model_config import GPModelExtenseOptimization
+from alef.configs.models.gp_model_config import BasicGPModelConfig, GPModelExtenseOptimization
 from alef.configs.models.object_gp_model_config import BasicObjectGPModelConfig
 from alef.kernels.kernel_factory import KernelFactory
 from alef.kernels.kernel_grammar.kernel_grammar_candidate_generator import KernelGrammarCandidateGenerator
@@ -27,6 +27,7 @@ from alef.models.object_mean_functions import ObjectConstant
 from alef.oracles.gp_model_bic_oracle import GPModelBICOracle
 from alef.oracles.gp_model_evidence_oracle import GPModelEvidenceOracle
 from alef.oracles.gp_model_cv_oracle import GPModelCVOracle
+from alef.bayesian_optimization.bayesian_optimizer_objects import BayesianOptimizerObjects
 from alef.configs.bayesian_optimization.bayesian_optimizer_objects_configs import ObjectBOExpectedImprovementEAConfig
 from alef.configs.kernels.grammar_tree_kernel_kernel_configs import (
     OTWeightedDimsExtendedGrammarKernelConfig,
@@ -34,8 +35,9 @@ from alef.configs.kernels.grammar_tree_kernel_kernel_configs import (
 )
 from alef.models.object_gp_model import ObjectGpModel, PredictionQuantity as PredictionQuantityMetaModel
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class OracleType(Enum):
@@ -67,7 +69,7 @@ class GPModelKernelSearch(BaseModel):
         default_n_steps_ea: int,
         population_size_tuple: Tuple[int, int],
         bo_n_initial_factor: int,
-        **kwargs,
+        **kwargs
     ) -> None:
         self.grammar_generator = grammar_generator
         self.oracle_type = oracle_type
@@ -89,9 +91,7 @@ class GPModelKernelSearch(BaseModel):
             perform_multi_start_optimization=False,
             set_prior_on_observation_noise=use_meta_gp_hp_prior,
         )
-        self.final_model_config = GPModelExtenseOptimization(
-            kernel_config=BaseKernelConfig(input_dimension=0, name="dummy")
-        )
+        self.final_model_config = GPModelExtenseOptimization(kernel_config=BaseKernelConfig(input_dimension=0, name="dummy"))
         self.model = None
 
     def get_bo_config(self):
@@ -107,9 +107,7 @@ class GPModelKernelSearch(BaseModel):
             population_size = self.population_size_fast_inference
         else:
             population_size = self.population_size_standard
-        return ObjectBOExpectedImprovementEAConfig(
-            n_steps_evolutionary=n_steps_ea, population_evolutionary=population_size
-        )
+        return ObjectBOExpectedImprovementEAConfig(n_steps_evolutionary=n_steps_ea, population_evolutionary=population_size)
 
     def infer(self, x_data: np.array, y_data: np.array):
         """
@@ -147,7 +145,7 @@ class GPModelKernelSearch(BaseModel):
     def entropy_predictive_dist(self, x_test: np.array) -> np.array:
         return self.model.entropy_predictive_dist(x_test)
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         return self.model.estimate_model_evidence(x_data, y_data)
 
     def reset_model(self):

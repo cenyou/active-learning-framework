@@ -13,22 +13,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from alef.configs.models.base_model_config import BaseModelConfig
+from alef.configs.kernels.base_kernel_config import BaseKernelConfig
+from alef.configs.kernels.hhk_configs import HHKEightLocalDefaultConfig
 
 
 class DeepGPConfig(BaseModelConfig):
-    n_iter: int = 3000
-    n_layer: int = 2
-    max_n_inducing_points: int = 300
-    learning_rate: float = 0.01
-    initial_likelihood_noise_variance: float = 0.01
+    n_iter : int = 3000
+    n_layer : int = 2
+    max_n_inducing_points : int = 300
+    learning_rate : float = 0.01
+    initial_likelihood_noise_variance :float =0.01
     name = "DeepGP"
 
-
 class ThreeLayerDeepGPConfig(DeepGPConfig):
-    n_layer: int = 3
+    n_layer : int = 3
     name = "ThreeLayerDeepGP"
 
-
 class FiveLayerDeepGPConfig(DeepGPConfig):
-    n_layer: int = 5
+    n_layer : int = 5
     name = "FiveLayerDeepGP"

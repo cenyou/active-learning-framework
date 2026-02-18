@@ -17,54 +17,51 @@ from typing import Tuple
 from sklearn import datasets, svm, metrics
 from sklearn.model_selection import train_test_split
 
-
 class MnistSVM:
+
     def __init__(self) -> None:
         self.transform = True
         if self.transform:
             self.__a = -1.0
             self.__b = 0.0
         else:
-            self.__a = 0.000001
-            self.__b = 1.0
+            self.__a=0.000001
+            self.__b=1.0
         self.load_data()
 
     def load_data(self):
         mnist_data = datasets.load_digits()
         images = mnist_data.images.reshape((len(mnist_data.images), -1))
         labels = mnist_data.target
-        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-            images, labels, test_size=0.2, shuffle=False
-        )
+        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(images, labels, test_size=0.2, shuffle=False)
 
-    def query(self, x: np.array) -> np.float:
+    def query(self,x : np.array) -> float:
         if self.transform:
-            gamma = np.exp(10 * x[0])
+            gamma = np.exp(10*x[0])
         else:
             gamma = x[0]
         svm_classifier = svm.SVC(gamma=gamma)
-        svm_classifier.fit(self.x_train, self.y_train)
+        svm_classifier.fit(self.x_train,self.y_train)
         pred_test = svm_classifier.predict(self.x_test)
-        accuracy = metrics.accuracy_score(self.y_test, pred_test)
+        accuracy = metrics.accuracy_score(self.y_test,pred_test)
         return accuracy
 
-    def get_random_data(self, n: int, noisy: bool = False) -> Tuple[np.array, np.array]:
-        X = np.random.uniform(low=self.__a, high=self.__b, size=(n, self.get_dimension()))
+    def get_random_data(self,n : int, noisy : bool = False) -> Tuple[np.array,np.array]:
+        X = np.random.uniform(low=self.__a,high=self.__b,size=(n,self.get_dimension()))
         function_values = []
         for x in X:
             function_value = self.query(x)
             function_values.append(function_value)
-        print("-Dataset of length " + str(n) + " generated")
-        return X, np.expand_dims(np.array(function_values), axis=1)
+        print("-Dataset of length "+str(n)+" generated")
+        return X, np.expand_dims(np.array(function_values),axis=1)
 
     def get_box_bounds(self):
-        return self.__a, self.__b
+        return self.__a,self.__b
 
     def get_dimension(self):
         return 1
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     mnist_svm = MnistSVM()
     mnist_svm.load_data()
     print(mnist_svm.get_random_data(6))

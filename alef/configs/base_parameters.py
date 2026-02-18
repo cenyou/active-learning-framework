@@ -12,13 +12,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import math
+import numpy as np
 
 NUMERICAL_POSITIVE_LOWER_BOUND = 1e-5
+NUMERICAL_POSITIVE_LOWER_BOUND_IN_LOG = math.log(NUMERICAL_POSITIVE_LOWER_BOUND)
 
 INPUT_DOMAIN = (0.0, 1.0)
+CENTRAL_DOMAIN = (0.6*INPUT_DOMAIN[0] + 0.4*INPUT_DOMAIN[1], 0.4*INPUT_DOMAIN[0] + 0.6*INPUT_DOMAIN[1])
 
 BASE_KERNEL_VARIANCE = 1.0
-BASE_KERNEL_LENGTHSCALE = 0.2
+BASE_KERNEL_LENGTHSCALE = 0.15
 BASE_RQ_KERNEL_ALPHA = 1.0
 BASE_LINEAR_KERNEL_OFFSET = 1.0
 BASE_KERNEL_PERIOD = 1.0

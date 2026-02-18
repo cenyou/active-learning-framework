@@ -15,17 +15,19 @@
 import numpy as np
 from alef.oracles.base_oracle import StandardOracle
 
-
 class Rosenbrock(StandardOracle):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
     def __init__(
         self,
         observation_noise: float,
         dimension: int = 4,
     ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param dimension: dimension of the input space
+        """
         super().__init__(observation_noise, 0.0, 1.0, dimension)
 
     def x_scale(self, x: np.ndarray):
@@ -44,10 +46,10 @@ class Rosenbrock(StandardOracle):
         x_ = self.x_scale(x)
         out = 0
 
-        for i in range(D - 1):
-            out += 100 * (x_[i + 1] - x_[i] ** 2) ** 2 + (x_[i] - 1) ** 2
+        for i in range(D-1):
+            out += 100 * (x_[i+1] - x_[i]**2)**2 + (x_[i] - 1)**2
         return out
-
+    
     def return_minimum(self):
         D = self.get_dimension()
         x_min_scaled = np.ones(D, type=float)
@@ -55,37 +57,38 @@ class Rosenbrock(StandardOracle):
         x_min = (x_min_scaled + 5) / 15 * (b - a) + a
         return (x_min, 0)
 
-    def query(self, x, noisy=True):
+    def query(self,x,noisy=True):
         function_value = self.f(x)
         if noisy:
-            epsilon = np.random.normal(0, self.observation_noise, 1)[0]
+            epsilon = np.random.normal(0,self.observation_noise,1)[0]
             function_value += epsilon
         return function_value
-
 
 class Rosenbrock3D(Rosenbrock):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
     def __init__(
         self,
         observation_noise: float,
     ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        """
         super().__init__(observation_noise, 3)
-
 
 class Rosenbrock4D(Rosenbrock):
     """
     see https://www.sfu.ca/~ssurjano/rosen.html
     """
-
     def __init__(
         self,
         observation_noise: float,
     ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        """
         super().__init__(observation_noise, 4)
-
 
 if __name__ == "__main__":
     oracle = Rosenbrock4D(0.01)

@@ -24,43 +24,50 @@ Copyright 2017-2020 The GPflow Contributors, licensed under the Apache License 2
 cf. 3rd-party-licenses.txt file in the root directory of this source tree).
 """
 
-
 class Delta(Static):
-    def K(self, X, X2=None) -> tf.Tensor:
+    def K(self, X, X2 = None) -> tf.Tensor:
         if X2 is None:
             d = tf.fill(tf.shape(X)[:-1], tf.squeeze(self.variance))
             return tf.linalg.diag(d)
         else:
-            return self.variance * tf.cast(tf_delta(X, X2), self.variance.dtype)
-
+            return self.variance * tf.cast( tf_delta(X, X2), self.variance.dtype )
 
 class Delta_t(Static):
-    def __init__(self, variance=1.0, reference_index=-1, active_dims=None):
+    def __init__(
+        self, variance = 1.0, reference_index=-1, active_dims = None
+    ):
         super().__init__(variance, active_dims)
         self.reference_index = reference_index
 
     def K_diag(self, X):
         ref_idx = tf.cast(tf.fill(tf.shape(X)[:-2], self.reference_index)[..., None, None], X.dtype)
-        return self.variance * tf.cast(tf_delta(X, ref_idx)[..., 0], self.variance.dtype)
+        return self.variance * tf.cast( tf_delta(X, ref_idx)[...,0], self.variance.dtype )
 
     def K(self, X, X2=None):
         if X2 is None:
             return tf.linalg.diag(self.K_diag(X))
         else:
-            joint_idx = tf.cast(tf.matmul(X, X2, transpose_b=True), tf.int32)
-            ref_idx = tf.cast(tf.square(self.reference_index), tf.int32)
-            return tf.where(joint_idx == ref_idx, self.variance, tf.zeros(1, dtype=self.variance.dtype))
+            joint_idx = tf.cast(
+                tf.matmul(X, X2, transpose_b=True),
+                tf.int32
+            )
+            ref_idx = tf.cast(
+                tf.square(self.reference_index),
+                tf.int32
+            )
+            return tf.where(joint_idx==ref_idx, self.variance, tf.zeros(1, dtype=self.variance.dtype))
+            
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
+    
     k = Delta()
 
-    x1 = np.reshape(np.arange(10) % 3, [-1, 1])
-    x2 = np.reshape(np.arange(1, 11) % 4, [-1, 1])
+    x1 = np.reshape( np.arange(10) % 3, [-1,1] )
+    x2 = np.reshape( np.arange(1, 11) % 4, [-1,1] )
     print(x1.reshape(-1))
     print(x2.reshape(-1))
-    print(k(x1, x2))
+    print( k(x1, x2) )
 
     k = Delta_t(reference_index=1)
-    print(k(x1))
-    print(k(x1, x2))
+    print( k(x1) )
+    print( k(x1, x2) )

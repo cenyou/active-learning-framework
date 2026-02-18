@@ -18,7 +18,6 @@ import tensorflow as tf
 from typing import Optional, Dict
 from .latent_kernel_enum import LatentKernel
 
-
 class BaseMultioutputFlattenedKernel(gpflow.kernels.Kernel):
     def __init__(
         self,
@@ -41,13 +40,20 @@ class BaseMultioutputFlattenedKernel(gpflow.kernels.Kernel):
             self.num_active_dimensions = input_dimension
         self.kernel = None
 
-    def __call__(self, X, X2: Optional = None, *, full_cov: bool = True, presliced: bool = False):
+    def __call__(
+        self,
+        X, X2 = None,
+        *,
+        full_cov: bool = True,
+        presliced: bool = False
+    ):
+
         if self.active_on_single_dimension:
             D = self.get_input_dimension()
             X = tf.gather(X, [self.active_dimension, D], axis=-1)
             if not X2 is None:
                 X2 = tf.gather(X2, [self.active_dimension, D], axis=-1)
-
+        
         return self.kernel(X, X2, full_cov=full_cov, presliced=presliced)
 
     @property
@@ -68,7 +74,7 @@ class BaseMultioutputFlattenedKernel(gpflow.kernels.Kernel):
         E.g. gpflow.kernels.Coregion(..., active_dims=[D]) * gpflow.kernels.Matern52(active_dims=tf.range(D))
              might not work properly.
 
-        Please only write a new K when you are absolutely sure about what you are doing.
+        Please only write a new K when you are absolutely sure about what you are doing. 
         """
         raise EnvironmentError("Please do not use this method, see self.__call__(**)")
 
@@ -79,45 +85,48 @@ class BaseMultioutputFlattenedKernel(gpflow.kernels.Kernel):
         If different kernel use different input dims (active_dims), slice becomes important.
         E.g. gpflow.kernels.Coregion(..., active_dims=[D]) * gpflow.kernels.Matern52(active_dims=tf.range(D))
              might not work properly.
-
-        Please only write a new K_diag when you are absolutely sure about what you are doing.
+        
+        Please only write a new K_diag when you are absolutely sure about what you are doing. 
         """
         raise EnvironmentError("Please do not use this method, see self.__call__(**)")
 
     def get_input_dimension(self):
         return self.input_dimension
-
+    
     def get_output_dimension(self):
         return self.output_dimension
-
+    
     def assign_parameters(self, parameter_values: Dict):
         def get_attribute(class_obj, name):
-            if "[" in name:
-                key, idx = name.split("]")[0].split("[")
+            if '[' in name:
+                key, idx = name.split(']')[0].split('[')
                 return getattr(class_obj, key)[int(idx)]
             else:
                 return getattr(class_obj, name)
-
+        
         for key, values in parameter_values.items():
             target = self.kernel
-            if "." in key:
-                for name in key.split("."):
+            if '.' in key:
+                for name in key.split('.'):
                     target = get_attribute(target, name)
             else:
                 target = get_attribute(target, key)
-            target.assign(values)
+            try:
+                target.assign(values)
+            except:
+                assert False, (key, target, values)
 
     @property
     def prior_scale(self):
         D = self.get_input_dimension()
         P = self.get_output_dimension()
         dumpy_point = np.zeros([1, D])
-        dumpy_point = np.hstack((dumpy_point, np.array([[P - 1]])))
+        dumpy_point = np.hstack((dumpy_point, np.array([[P-1]])))
 
         var_scale = self(dumpy_point, full_cov=False).numpy().reshape(-1)[0]
         std_scale = np.sqrt(var_scale)
         return std_scale
-
+    
     def pick_kernel_object(self, latent_kernel: LatentKernel):
         if latent_kernel == LatentKernel.RBF:
             return gpflow.kernels.RBF
@@ -129,3 +138,4 @@ class BaseMultioutputFlattenedKernel(gpflow.kernels.Kernel):
             return gpflow.kernels.Matern52
         else:
             raise NotImplementedError
+

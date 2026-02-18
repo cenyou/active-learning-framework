@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List, Tuple
+import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 import numpy as np
 import gpflow
@@ -25,16 +26,7 @@ f64 = gpflow.utilities.to_default_float
 
 
 class WeightedAdditiveKernel(gpflow.kernels.Kernel):
-    def __init__(
-        self,
-        base_kernel_list: List[gpflow.kernels.Kernel],
-        base_variance: float,
-        use_own_variance: bool,
-        add_prior: bool,
-        alpha_prior_parameters: Tuple[float, float],
-        variance_prior_parameters: Tuple[float, float],
-        **kwargs,
-    ):
+    def __init__(self, base_kernel_list: List[gpflow.kernels.Kernel], base_variance: float, use_own_variance: bool, add_prior: bool, alpha_prior_parameters: Tuple[float, float], variance_prior_parameters: Tuple[float, float], **kwargs):
         super().__init__()
         self.base_kernel_list = base_kernel_list
         self.use_own_variance = use_own_variance

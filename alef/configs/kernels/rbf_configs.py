@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Tuple, Union, Sequence
+from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.configs.kernels.base_elementary_kernel_config import BaseElementaryKernelConfig
 from alef.configs.base_parameters import (
     BASE_KERNEL_VARIANCE,
@@ -22,7 +23,6 @@ from alef.configs.prior_parameters import (
     KERNEL_LENGTHSCALE_GAMMA,
     KERNEL_VARIANCE_GAMMA,
 )
-
 
 class BasicRBFConfig(BaseElementaryKernelConfig):
     base_lengthscale: Union[float, Sequence[float]] = BASE_KERNEL_LENGTHSCALE

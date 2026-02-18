@@ -14,9 +14,10 @@
 
 from datetime import datetime
 import pickle
-from typing import Union, Sequence, List
+from typing import Tuple, Union, Sequence, List
 import json
 import os
+from typing import List, Union
 import gpflow
 import gpytorch
 import numpy as np
@@ -25,6 +26,7 @@ from scipy.stats import norm
 from sklearn.cluster import KMeans
 import math
 import tensorflow as tf
+from distutils import util
 
 from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression
 
@@ -210,7 +212,7 @@ def scale_data(x: np.array):
 
 def k_means(num_clusters: int, x_data: np.array):
     assert len(x_data.shape) == 2
-    kmeans = KMeans(n_clusters=num_clusters).fit(x_data)
+    kmeans = KMeans(n_clusters=num_clusters, n_init='auto').fit(x_data)
     return kmeans.cluster_centers_
 
 
@@ -347,9 +349,7 @@ def get_hp_sample_from_prior_gpytorch_as_state_dict(expression: BaseKernelGramma
     return state_dict
 
 
-def get_gpytorch_kernel_from_expression_and_state_dict(
-    expression: BaseKernelGrammarExpression, state_dict, wrap_in_addition=True
-):
+def get_gpytorch_kernel_from_expression_and_state_dict(expression: BaseKernelGrammarExpression, state_dict, wrap_in_addition=True):
     kernel = expression.get_kernel()
     if wrap_in_addition:
         kernel = gpytorch.kernels.AdditiveKernel(kernel)
@@ -381,11 +381,14 @@ def tf_delta(X, X2):
         [N, M] bool array, [output]_nm is 1 if [X]_n == [X2]_m, is 0 if not equal
     """
     shape = tf.concat([tf.shape(X)[:-1], tf.shape(X2)[:-1]], axis=0)
-
-    A = tf.expand_dims(X, axis=-1)  # [..., N, D, 1]
-    B = tf.einsum("...ijk->...kji", tf.expand_dims(X2, axis=-1))  # [..., 1, D, M]
-
-    return tf.math.equal(tf.reduce_sum(tf.square(A - B), axis=-2), tf.zeros(shape, dtype=X.dtype))
+    
+    A = tf.expand_dims(X, axis=-1) # [..., N, D, 1]
+    B = tf.einsum("...ijk->...kji", tf.expand_dims(X2, axis=-1) ) # [..., 1, D, M]
+    
+    return tf.math.equal(
+            tf.reduce_sum(tf.square(A - B), axis=-2),
+            tf.zeros(shape, dtype=X.dtype)
+        )
 
 
 if __name__ == "__main__":

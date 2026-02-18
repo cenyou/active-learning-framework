@@ -14,30 +14,30 @@
 
 import numpy as np
 from typing import Tuple, Optional
-from abc import ABC, abstractmethod
-
+from abc import ABC,abstractmethod
 
 class BaseModel(ABC):
+
     @abstractmethod
     def reset_model(self):
         """
-        resets a model to internal states that were present at initialization (for example trained parameters)
+        resets a model to internal states that were present at initialization (for example trained parameters) 
         """
         raise NotImplementedError
 
     @abstractmethod
-    def infer(self, x_data: np.array, y_data: np.array):
+    def infer(self,x_data: np.array,y_data: np.array):
         """
         Performs inference of the model - trains all parameters and latent variables needed for prediction
 
         Arguments:
         x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
-        y_data: Label array with shape (n,m) where n is the number of training points and m the number of outputs
+        y_data: Label array with shape (n,m) where n is the number of training points and m the number of outputs 
         """
         raise NotImplementedError
 
     @abstractmethod
-    def predictive_dist(self, x_test: np.array) -> Tuple[np.array, np.array]:
+    def predictive_dist(self,x_test: np.array) -> Tuple[np.array,np.array]:
         """
         Method for retrieving the predictive mean and sigma for a given array of the test points
 
@@ -51,7 +51,7 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
+    def estimate_model_evidence(self,x_data: Optional[np.array] = None,y_data: Optional[np.array] = None) -> float:
         """
         Method for estimating the model evidence (as we only use bayesian models this should in principle be possible)
 
@@ -60,12 +60,12 @@ class BaseModel(ABC):
         y_data: Optional - Label array with shape (n,1) where n is the number of training points
 
         Returns:
-        evidence value - single value
+        evidence value - single value 
         """
         raise NotImplementedError
 
     @abstractmethod
-    def entropy_predictive_dist(self, x_test: np.array) -> np.array:
+    def entropy_predictive_dist(self,x_test: np.array) -> np.array:
         """
         Method for calculating the entropy of the predictive distribution for test sequence - used for acquistion function in active learning
 
@@ -78,7 +78,7 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def predictive_log_likelihood(self, x_test: np.array, y_test: np.array) -> np.array:
+    def predictive_log_likelihood(self,x_test : np.array,y_test : np.array) -> np.array:
         """
         Method for calculating the log likelihood value of the the predictive distribution at the test input points (evaluated at the output values)
         - method is therefore for validation purposes only
@@ -88,6 +88,11 @@ class BaseModel(ABC):
         y_test: Array of test output points with shape (n,m) where m is the number of output dimensions
 
         Returns:
-        array of shape (n,) with log liklihood values
+        array of shape (n,) with log liklihood values 
         """
         raise NotImplementedError
+
+
+
+    
+

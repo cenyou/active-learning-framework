@@ -16,10 +16,11 @@ from alef.configs.models.base_model_config import BaseModelConfig
 
 
 class BasicSVGPConfig(BaseModelConfig):
-    input_dimension: int
-    output_dimension: int
-    name: str = "BasicSVGP"
+    input_dimension : int 
+    output_dimension : int
+    name : str = "BasicSVGP"
 
 
-if __name__ == "__main__":
-    config = BasicSVGPConfig(input_dimension=1, output_dimension=2)
+
+if __name__ == '__main__':
+    config = BasicSVGPConfig(input_dimension=1,output_dimension=2)

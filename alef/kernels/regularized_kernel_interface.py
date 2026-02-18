@@ -12,10 +12,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from abc import ABC, abstractmethod
+from abc import ABC,abstractmethod
 import tensorflow as tf
 import numpy as np
-
 
 class RegularizedKernelInterface(ABC):
     """
@@ -23,7 +22,7 @@ class RegularizedKernelInterface(ABC):
     """
 
     @abstractmethod
-    def regularization_loss(self, x_data: np.array) -> tf.Tensor:
+    def regularization_loss(self,x_data : np.array) -> tf.Tensor:
         """
         Method for retrieving the loss that should be added to the marginal likelihood loss of a gp (loss is regularizer for kernel HP's)
 

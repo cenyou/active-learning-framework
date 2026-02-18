@@ -13,6 +13,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from copy import deepcopy
+from gpflow import kernels
+from scipy.stats.stats import mode
 from alef.configs.kernels.hhk_configs import HHKEightLocalDefaultConfig
 from alef.configs.models.ahgp_model_config import AHGPModelConfig
 from alef.configs.models.base_model_config import BaseModelConfig
@@ -22,8 +24,8 @@ from alef.configs.models.gp_model_amortized_structured_config import BasicGPMode
 from alef.configs.models.gp_model_config import BasicGPModelConfig
 from alef.configs.models.gp_model_kernel_search_config import BaseGPModelKernelSearchConfig
 from alef.configs.models.gp_model_marginalized_config import BasicGPModelMarginalizedConfig
+from alef.configs.models.gp_model_mixture_config import BasicGPModelMixtureConfig
 from alef.configs.models.gp_model_laplace_config import BasicGPModelLaplaceConfig
-from alef.configs.models.gp_model_pytorch_ensemble_config import BasicGPModelPytorchEnsembleConfig
 from alef.configs.models.mogp_model_config import BasicMOGPModelConfig
 from alef.configs.models.svgp_model_pytorch_config import BasicSVGPModelPytorchConfig
 from alef.kernels.pytorch_kernels.pytorch_kernel_factory import PytorchKernelFactory
@@ -33,6 +35,7 @@ from alef.models.gp_model import GPModel
 from alef.models.gp_model_amortized_structured import GPModelAmortizedStructured
 from alef.models.gp_model_kernel_search import GPModelKernelSearch
 from alef.models.gp_model_marginalized import GPModelMarginalized
+from alef.models.gp_model_mixture import GPModelMixture
 from alef.models.mogp_model import MOGPModel
 from alef.models.gp_model_laplace import GPModelLaplace
 from alef.kernels.kernel_factory import KernelFactory
@@ -42,14 +45,13 @@ from alef.models.svgp_model import SVGPModel
 from alef.configs.models.svgp_model_config import BasicSVGPConfig
 from alef.models.gp_model_mcmc import GPModelMCMC
 from alef.configs.models.gp_model_mcmc_config import (
+    BasicGPModelMCMCConfig,
     AdditiveProposalGPModelMCMCConfig,
     KernelGrammarGPModelMCMCConfig,
 )
 from alef.models.gp_model_mcmc_proposals import AdditiveGPMCMCProposal, AdditiveGPMCMCState
 from alef.kernels.additive_kernel import Partition
-from alef.models.gp_model_mcmc_proposals import (
-    KernelGrammarMCMCProposal,
-)
+from alef.models.gp_model_mcmc_proposals import ElementaryKernelGrammarExpression, KernelGrammarMCMCProposal, KernelGrammarMCMCState
 from alef.models.sparse_gp_model import SparseGpModel
 from alef.configs.models.sparse_gp_model_config import BasicSparseGPModelConfig
 from alef.models.gp_model_scalable import GPModelScalable
@@ -59,16 +61,21 @@ from alef.configs.models.object_gp_model_config import BasicObjectGPModelConfig
 from alef.kernels.kernel_grammar.generator_factory import GeneratorFactory
 from alef.configs.models.mogp_model_so_config import BasicSOMOGPModelConfig
 from alef.models.mogp_model_so import SOMOGPModel
+from alef.configs.models.mogp_sparse_model_so_config import BasicSOMOSparseGPModelConfig
+from alef.models.mogp_sparse_model_so import SOMOSparseGPModel
 from alef.configs.models.mogp_model_so_marginalized_config import BasicSOMOGPModelMarginalizedConfig
 from alef.models.mogp_model_so_marginalized import SOMOGPModelMarginalized
 from alef.configs.models.gp_model_pytorch_config import BasicGPModelPytorchConfig
 from alef.models.gp_model_pytorch import GPModelPytorch
-from alef.models.gp_model_pytorch_ensemble import GPModelPytorchEnsemble
 from alef.models.gp_model_amortized_ensemble import GPModelAmortizedEnsemble
 from alef.configs.models.mogp_model_transfer_config import BasicTransferGPModelConfig
 from alef.models.mogp_model_transfer import TransferGPModel
 from alef.configs.models.metagp_model_config import BasicMetaGPModelConfig
 from alef.models.metagp_model import MetaGPModel
+from alef.configs.models.gp_model_for_engine1_config import Engine1GPModelConfig
+from alef.configs.models.gp_model_for_engine2_config import Engine2GPModelConfig
+from alef.configs.models.pfn_model_config import BasicPFNModelConfig
+from alef.models.pfn_model import PFNModel
 import gpflow
 import numpy as np
 
@@ -84,6 +91,10 @@ class ModelFactory:
             kernel = KernelFactory.build(model_config.kernel_config)
             model = GPModelMarginalized(kernel=kernel, **model_config.dict())
             return model
+        elif isinstance(model_config, BasicGPModelMixtureConfig):
+            kernel = KernelFactory.build(model_config.kernel_config)
+            model = GPModelMixture(kernel=kernel, **model_config.dict())
+            return model
         elif isinstance(model_config, BasicSparseGPModelConfig):
             kernel = KernelFactory.build(model_config.kernel_config)
             model = SparseGpModel(kernel=kernel, **model_config.dict())
@@ -94,9 +105,7 @@ class ModelFactory:
             model = GPModelLaplace(kernel=kernel, **model_config.dict())
             return model
         elif isinstance(model_config, BasicSVGPConfig):
-            kernel = gpflow.kernels.SharedIndependent(
-                gpflow.kernels.SquaredExponential(), output_dim=model_config.output_dimension
-            )
+            kernel = gpflow.kernels.SharedIndependent(gpflow.kernels.SquaredExponential(), output_dim=model_config.output_dimension)
             lik = MultiGaussian(np.array([1.0 for _ in range(model_config.output_dimension)]))
             model = SVGPModel(kernel, lik, M=5, input_dim=model_config.input_dimension)
             model.set_optimizer(opt="adam", MAXITER=500, learning_rate=0.1)
@@ -109,6 +118,10 @@ class ModelFactory:
         elif isinstance(model_config, BasicSOMOGPModelConfig):
             kernel = KernelFactory.build(model_config.kernel_config)
             model = SOMOGPModel(kernel=kernel, **model_config.dict())
+            return model
+        elif isinstance(model_config, BasicSOMOSparseGPModelConfig):
+            kernel = KernelFactory.build(model_config.kernel_config)
+            model = SOMOSparseGPModel(kernel=kernel, **model_config.dict())
             return model
         elif isinstance(model_config, BasicTransferGPModelConfig):
             kernel = KernelFactory.build(model_config.kernel_config)
@@ -156,7 +169,8 @@ class ModelFactory:
             return model
         elif isinstance(model_config, BasicMetaGPModelConfig):
             kernel = KernelFactory.build(model_config.kernel_config)
-            model = MetaGPModel(kernel=kernel, **model_config.dict())
+            model = MetaGPModel(kernel=kernel, **model_config.dict(exclude={'load_model'}))
+            model.load_meta_gp_model(model_config.load_model) # empty load model means don't load, this is handled
             return model
         elif isinstance(model_config, BasicSVGPModelPytorchConfig):
             kernel = PytorchKernelFactory.build(model_config.kernel_config)
@@ -175,9 +189,6 @@ class ModelFactory:
             model.set_kernel_list(kernel_list)
             model.load_amortized_model(model_config.checkpoint_path, True)
             return model
-        elif isinstance(model_config, BasicGPModelPytorchEnsembleConfig):
-            model = GPModelPytorchEnsemble(gp_model_config=model_config.gp_model_config)
-            return model
         elif isinstance(model_config, BasicGPModelAmortizedEnsembleConfig):
             kernel_list = model_config.kernel_list
             model = GPModelAmortizedEnsemble(
@@ -188,6 +199,11 @@ class ModelFactory:
             model.set_kernel_list(kernel_list)
             model.load_amortized_model(model_config.checkpoint_path, True)
             return model
+        elif isinstance(model_config, BasicPFNModelConfig):
+            model = PFNModel(
+                pfn_backend_config=model_config.pfn_backend_config, **model_config.dict(exclude={'pfn_backend_config'})
+            )
+            return model
         else:
             raise NotImplementedError(f"Invalid config: {model_config.__class__.__name__}")
 
@@ -196,9 +212,7 @@ class ModelFactory:
         transformed_model_config = deepcopy(model_config)
         if hasattr(transformed_model_config, "input_dimension"):
             transformed_model_config.input_dimension = input_dimension
-        if hasattr(transformed_model_config, "kernel_config") and hasattr(
-            transformed_model_config.kernel_config, "input_dimension"
-        ):
+        if hasattr(transformed_model_config, "kernel_config") and hasattr(transformed_model_config.kernel_config, "input_dimension"):
             transformed_model_config.kernel_config.input_dimension = input_dimension
         return transformed_model_config
 

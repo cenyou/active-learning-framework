@@ -15,6 +15,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from numpy.core.defchararray import upper
+
+from numpy.core.fromnumeric import sort
 
 
 class MetricCurvePlotter:
@@ -28,24 +31,18 @@ class MetricCurvePlotter:
         metrics_value = np.array(metrics_value)
         if sort_x:
             sorted_indexes = np.argsort(x_values)
-            self.give_axes(ax_num).plot(
-                x_values[sorted_indexes], metrics_value[sorted_indexes], color=color, label=label
-            )
+            self.give_axes(ax_num).plot(x_values[sorted_indexes], metrics_value[sorted_indexes], color=color, label=label)
         else:
             self.give_axes(ax_num).plot(x_values, metrics_value, color=color, label=label)
 
-    def add_metrics_curve_with_errors(
-        self, x_values, metrics_value, lower_error_bar, upper_error_bar, color, label, ax_num, sort_x=True
-    ):
+    def add_metrics_curve_with_errors(self, x_values, metrics_value, lower_error_bar, upper_error_bar, color, label, ax_num, sort_x=True):
         x_values = np.array(x_values)
         metrics_value = np.array(metrics_value)
         lower_error_bar = metrics_value - np.array(lower_error_bar)
         upper_error_bar = np.array(upper_error_bar) - metrics_value
         if sort_x:
             sorted_indexes = np.argsort(x_values)
-            self.give_axes(ax_num).plot(
-                x_values[sorted_indexes], metrics_value[sorted_indexes], color=color, label=label
-            )
+            self.give_axes(ax_num).plot(x_values[sorted_indexes], metrics_value[sorted_indexes], color=color, label=label)
             self.give_axes(ax_num).errorbar(
                 x_values[sorted_indexes],
                 metrics_value[sorted_indexes],
@@ -61,15 +58,7 @@ class MetricCurvePlotter:
             )
 
     def configure_axes(
-        self,
-        ax_num: int,
-        ax_title: str,
-        x_label: str,
-        y_label: str,
-        log_scale_y: bool,
-        add_legend: bool,
-        x_lim=None,
-        y_lim=None,
+        self, ax_num: int, ax_title: str, x_label: str, y_label: str, log_scale_y: bool, add_legend: bool, x_lim=None, y_lim=None
     ):
         ax = self.give_axes(ax_num)
         ax.set_xlabel(x_label)

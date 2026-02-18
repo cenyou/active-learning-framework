@@ -12,19 +12,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import gpflow
+import numpy as np
+import tensorflow as tf
+from typing import Optional, Dict
 
 from .base_multioutput_flattened_kernel import BaseMultioutputFlattenedKernel
-
 
 class BaseTransferKernel(BaseMultioutputFlattenedKernel):
     def get_source_parameters_trainable(self) -> bool:
         raise NotImplementedError
-
     def set_source_parameters_trainable(self, source_trainable: bool):
         raise NotImplementedError
-
     def get_target_parameters_trainable(self) -> bool:
         raise NotImplementedError
-
     def set_target_parameters_trainable(self, target_trainable: bool):
         raise NotImplementedError

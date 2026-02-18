@@ -15,8 +15,9 @@
 from alef.bayesian_optimization.base_candidate_generator import CandidateGenerator
 import numpy as np
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class EvolutionaryOptimizerObjects:
@@ -36,15 +37,12 @@ class EvolutionaryOptimizerObjects:
         self.current_maximizer_value = -1 * np.infty
 
     def maximize(self, func, steps):
-        """
-        Maximize the objective function.
-        """
         logger.info("EA - Start optimization")
         population = self.candidate_generator.get_initial_for_evolutionary_opt(n_initial=self.population_size)
         for step in range(0, steps):
             print("Step " + str(step + 1) + "/" + str(steps))
             if step > 0:
-                survivors = self.select(population, function_values)  # noqa: F821
+                survivors = self.select(population, function_values)
                 population = self.reproduce(survivors)
             function_values = func(population)
             fittest_index = np.argmax(function_values)
@@ -62,9 +60,6 @@ class EvolutionaryOptimizerObjects:
         return self.current_maximizer, self.current_maximizer_value
 
     def select(self, population, function_values):
-        """
-        Select the best candidates from the population.
-        """
         sorted_indexes = np.argsort(function_values)
         n = sorted_indexes.shape[0]
         num_survive = int(self.population_size * self.survival_rate)
@@ -75,12 +70,7 @@ class EvolutionaryOptimizerObjects:
         return survivors
 
     def reproduce(self, survivors):
-        """
-        Reproduce new candidates from the survivors.
-        """
         new_generation = []
         for survivor in survivors:
-            new_generation += self.candidate_generator.get_around_candidate_for_evolutionary_opt(
-                survivor, self.num_offspring
-            )
+            new_generation += self.candidate_generator.get_around_candidate_for_evolutionary_opt(survivor, self.num_offspring)
         return new_generation + survivors

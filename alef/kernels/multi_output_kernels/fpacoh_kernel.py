@@ -14,34 +14,24 @@
 
 import numpy as np
 import gpflow
-from gpflow.utilities import set_trainable
-
-
-from alef.kernels.multi_output_kernels.base_transfer_kernel import BaseTransferKernel
-from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
+import tensorflow as tf
+import tensorflow_probability as tfp
+from typing import Tuple, Union, List, Sequence
+from gpflow.utilities import print_summary, set_trainable
 
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
+from tensorflow_probability import distributions as tfd
 
-"""
-The kernel in
-
-Alonso Marco, Felix Berkenkamp, Philipp Hennig, Angela P. Schoellig, Andreas Krause, Stefan Schaal and Sebastian Trimpe,
-ICRA 2017, Virtual vs. Real: Trading Off Simulations and Physical Experiments in Reinforcement Learning with Bayesian Optimization
-
-
-The kernel is similar to this one:
-Matthias Poloczek, Jialei Wang and Peter Frazier, NeurIPS 2017, Multi-Information Source Optimization
-
-"""
-
+from alef.utils.gpflow_addon.kronecker_delta_kernel import Delta, Delta_t
+from alef.kernels.multi_output_kernels.base_transfer_kernel import BaseTransferKernel
+from alef.kernels.multi_output_kernels.latent_kernel_enum import LatentKernel
 
 class FPACOHKernel(BaseTransferKernel):
     """
     X: [N, D+1], the last column is binary
     D: input_dimension
     """
-
     def __init__(
         self,
         base_variance: float,
@@ -52,8 +42,9 @@ class FPACOHKernel(BaseTransferKernel):
         active_on_single_dimension: bool,
         active_dimension: int,
         name: str,
-        **kwargs,
+        **kwargs
     ):
+        P = output_dimension
         super().__init__(
             input_dimension,
             output_dimension,
@@ -65,15 +56,15 @@ class FPACOHKernel(BaseTransferKernel):
         self.base_variance = base_variance
         self.base_lengthscale = base_lengthscale
         self.kernel_type = latent_kernel
-
+    
     @property
     def num_latent_gps(self):
         return 1
-
+    
     @property
     def latent_kernels(self):
         return [self.kernel.kernels[0], self.kernel.kernels[1].kernels[1]]
-
+    
     def get_source_parameters_trainable(self):
         return self.kernel.kernels[0].lengthscales.trainable
 
@@ -85,9 +76,8 @@ class FPACOHKernel(BaseTransferKernel):
         return self.kernel.kernels[1].kernels[1].lengthscales.trainable
 
     def set_target_parameters_trainable(self, target_trainable: bool):
-        self.output_dimension
+        P = self.output_dimension
         set_trainable(self.kernel.kernels[1].kernels[1], target_trainable)
-
 
 if __name__ == "__main__":
     pass

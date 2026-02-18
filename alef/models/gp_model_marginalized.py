@@ -16,12 +16,14 @@ import logging
 import gpflow
 from typing import Iterator
 import tensorflow as tf
+from tensorflow.python.ops.gen_array_ops import deep_copy
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 from typing import List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
-from gpflow.utilities import print_summary, set_trainable
+from gpflow.utilities import print_summary, set_trainable, to_default_float
+from enum import Enum
 from scipy.stats import multivariate_normal
 from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
@@ -36,7 +38,9 @@ from alef.utils.plotter2D import Plotter2D
 gpflow.config.set_default_float(np.float64)
 gpflow.config.set_default_jitter(1e-4)
 f64 = gpflow.utilities.to_default_float
-logger = logging.getLogger(__name__)
+
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterface):
@@ -72,7 +76,7 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         initialization_type: InitializationType = InitializationType.PRIOR_DRAW,
         prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y,
         entropy_approximation: EntropyApproximation = EntropyApproximation.MOMENT_MATCHED_GAUSSIAN,
-        **kwargs,
+        **kwargs
     ):
         self.observation_noise = observation_noise
         self.expected_observation_noise = expected_observation_noise
@@ -167,7 +171,7 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         Arguments:
             draw_initial_from_prior: bool if the initial parameters should be drawn from prior at the beginning
         """
-        logger.info("-Start initial optimization")
+        logger.debug("-Start initial optimization")
         if draw_initial_from_prior:
             logger.debug("Initial parameters:")
             self.draw_from_hyperparameter_prior()
@@ -187,7 +191,7 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
             else:
                 logger.debug("Optimization succesful - learned parameters:")
                 self.print_model_summary()
-        logger.info("-Optimization done")
+        logger.debug("-Optimization done")
 
     def draw_from_hyperparameter_prior(self, show_draw: bool = True):
         """
@@ -215,14 +219,13 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         x_data: Input array with shape (n,d) where d is the input dimension and n the number of training points
         y_data: Label array with shape (n,1) where n is the number of training points
         """
-        logger.info("-Infer")
+        logger.debug("-Infer")
         self.build_model(x_data, y_data)
         self.hmc_helper = gpflow.optimizers.SamplingHelper(self.log_posterior_density, self.model.trainable_parameters)
         hmc = tfp.mcmc.HamiltonianMonteCarlo(self.hmc_helper.target_log_prob_fn, num_leapfrog_steps=10, step_size=0.01)
         adaptive_hmc = tfp.mcmc.SimpleStepSizeAdaptation(
             hmc, num_adaptation_steps=10, target_accept_prob=f64(self.target_acceptance_prob), adaptation_rate=0.1
         )
-
         # @TODO: test if this function declaration is guilty for memory leaks
         @tf.function
         def run_chain_fn():
@@ -239,14 +242,14 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         while not inference_success:
             self.initialize_first_sample()
             try:
-                logger.info("-Start sampling")
+                logger.debug("-Start sampling")
                 self.samples, traces = run_chain_fn()
                 inference_success = True
             except:
                 logger.error("ERROR in MCMC sampling - repeat")
         self.parameter_samples = self.hmc_helper.convert_to_constrained_values(self.samples)
         self.param_to_name = {param: name for name, param in gpflow.utilities.parameter_dict(self.model).items()}
-        logger.info("-Inference done")
+        logger.debug("-Inference done")
         if self.print_posterior_summary:
             self.print_parameter_sample_summary()
         if self.plot_posterior:
@@ -381,7 +384,7 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
             param_names.append(param_name)
         return self.parameter_samples, param_names
 
-    def estimate_model_evidence(self, x_data: np.array, y_data: np.array, sample_size=1000) -> np.float:
+    def estimate_model_evidence(self, x_data: np.array, y_data: np.array, sample_size=1000) -> float:
         """
         Sample estimate of the model evidence p(y|M,x)=intergal(p(y|theta,x,M)p(theta|M)d theta) - very bad estimate
         @TODO: provide better estimate - maybe fall back to laplace method
@@ -475,22 +478,17 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         sigmas_over_inputs = []
         for i in range(0, n):
             mu = np.mean(pred_mus_complete[:, i])
-            var = np.mean(
-                np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0)
-            )
+            var = np.mean(np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0))
             mus_over_inputs.append(mu)
             sigmas_over_inputs.append(np.sqrt(var))
         return np.array(mus_over_inputs), np.array(sigmas_over_inputs)
 
     def get_predictive_distributions(self, x_test: np.array) -> List[Tuple[np.array, np.array]]:
         pred_mus_complete, pred_sigmas_complete = self.predict(x_test, self.prediction_quantity)
-        pred_dists = [
-            (np.squeeze(pred_mus_complete[j, :]), np.squeeze(pred_sigmas_complete[j, :]))
-            for j in range(0, self.num_samples)
-        ]
+        pred_dists = [(np.squeeze(pred_mus_complete[j, :]), np.squeeze(pred_sigmas_complete[j, :])) for j in range(0, self.num_samples)]
         return pred_dists
 
-    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> np.float:
+    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> float:
         """
         Estimates entropy of full predictive distribution over all test points (batch mode) - predictive distribution is an n dim mixture of Gaussian
         - entropy is approximated with that of a gaussian distribution with same covariance matrix as the mixture
@@ -508,7 +506,7 @@ class GPModelMarginalized(BaseModel, BatchModelInterace, BayesianEnsembleInterfa
         entropy = gmm.entropy_gaussian_approx()
         return entropy
 
-    def hyper_batch_bald(self, x_test: np.array) -> np.float:
+    def hyper_batch_bald(self, x_test: np.array) -> float:
         pred_mus, pred_sigmas = self.predict_full_cov(x_test, self.prediction_quantity)
         n_samples = len(pred_mus)
         assert n_samples == self.num_samples

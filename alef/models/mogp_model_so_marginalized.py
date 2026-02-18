@@ -13,14 +13,15 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-from typing import List, Tuple, Iterator
+from typing import Union, Sequence, List, Tuple, Optional, Iterator
 import gpflow
 from gpflow.utilities import print_summary, set_trainable
+from gpflow.kernels import Kernel, MultioutputKernel
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
-from scipy.stats import multivariate_normal
 
+from alef.utils.utils import normal_entropy
 from alef.models.base_model import BaseModel
 from alef.models.mo_gpr_so import SOMOGPR
 from alef.utils.gaussian_mixture_density import GaussianMixtureDensity
@@ -28,13 +29,12 @@ from alef.utils.gaussian_mixture_density_nd import GaussianMixtureDensityNd
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
 from alef.kernels.multi_output_kernels.base_multioutput_flattened_kernel import BaseMultioutputFlattenedKernel
 from alef.enums.global_model_enums import InitializationType, PredictionQuantity
-import matplotlib.pyplot as plt
-import logging
 
-logger = logging.getLogger(__name__)
+import logging
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 f64 = gpflow.utilities.to_default_float
-
 
 class SOMOGPModelMarginalized(BaseModel):
     """
@@ -68,7 +68,7 @@ class SOMOGPModelMarginalized(BaseModel):
         thin_steps: int = 50,
         initialization_type: InitializationType = InitializationType.PRIOR_DRAW,
         prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y,
-        **kwargs,
+        **kwargs
     ):
         self.observation_noise = observation_noise
         self.expected_observation_noise = expected_observation_noise
@@ -115,7 +115,20 @@ class SOMOGPModelMarginalized(BaseModel):
         self.mean_function = gpflow.mean_functions.Constant(c=constant)
 
     def data_decorator(self, x, y):
-        return x, np.hstack((y[..., :1], x[..., -1, None]))
+        return x, np.hstack((y[...,:1], x[...,-1,None]))
+
+    def set_model_data(self, x_data: np.array, y_data: np.array):
+        """
+        Method to manipulate observations without altering GP object
+
+        Arguments:
+            x_data: Input array with shape (n,d+1) where d is the input dimension and n the number of training points
+            y_data: Label array with shape (n,1) where n is the number of training points
+        """
+        assert hasattr(self, 'model')
+        assert isinstance(self.model, SOMOGPR)
+        xx, yy = self.data_decorator(x_data, y_data)
+        self.model.data = gpflow.models.util.data_input_to_tensor((xx, yy))
 
     def build_model(self, x_data: np.array, y_data: np.array):
         """
@@ -128,27 +141,15 @@ class SOMOGPModelMarginalized(BaseModel):
         xx, yy = self.data_decorator(x_data, y_data)
         model = SOMOGPR
         if self.use_mean_function:
-            self.model = model(
-                data=(xx, yy),
-                kernel=self.kernel,
-                mean_function=self.mean_function,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
-            set_trainable(self.model.mean_function.c, False)
+            self.model = model(data=(xx, yy),kernel=self.kernel,mean_function=self.mean_function,noise_variance=np.power(self.observation_noise,2.0))
+            set_trainable(self.model.mean_function.c,False)
         else:
-            self.model = model(
-                data=(xx, yy),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
-
+            self.model = model(data=(xx, yy),kernel=self.kernel,mean_function=None,noise_variance=np.power(self.observation_noise,2.0))
+        
         if self.train_likelihood_variance:
             for lik in self.model.likelihood.likelihoods:
                 set_trainable(lik.variance, True)
-                lik.variance.prior = tfd.Exponential(
-                    f64(1 / self.expected_observation_noise**2), name="likelihood_prior_Exponential"
-                )
+                lik.variance.prior = tfd.Exponential(f64(1/self.expected_observation_noise**2), name='likelihood_prior_Exponential')
         else:
             set_trainable(self.model.likelihood, False)
 
@@ -170,14 +171,14 @@ class SOMOGPModelMarginalized(BaseModel):
         Arguments:
             draw_initial_from_prior: bool if the initial parameters should be drawn from prior at the beginning
         """
-        logger.info("-Start initial optimization")
+        logger.debug("-Start initial optimization")
         if draw_initial_from_prior:
             self.draw_from_hyperparameter_prior()
             logger.debug("Initial parameters:")
             # print_summary(self.model)
         optimizer = gpflow.optimizers.Scipy()
         optimization_success = False
-        while not optimization_success:
+        while not optimization_success and len(self.model.trainable_variables) > 0:
             try:
                 opt_res = optimizer.minimize(self.training_loss, self.model.trainable_variables)
                 optimization_success = opt_res.success
@@ -190,7 +191,7 @@ class SOMOGPModelMarginalized(BaseModel):
             else:
                 logger.debug("Optimization succesful - learned parameters:")
                 self.print_model_summary()
-        logger.info("-Optimization done")
+        logger.debug("-Optimization done")
 
     def draw_from_hyperparameter_prior(self, show_draw: bool = True):
         """
@@ -199,7 +200,7 @@ class SOMOGPModelMarginalized(BaseModel):
         Arguments:
             show_draw: bool if the drawn parameters should be printed
         """
-        logger.info("-Draw from hyperparameter prior")
+        logger.debug("-Draw from hyperparameter prior")
         for parameter in self.model.trainable_parameters:
             try:
                 new_value = parameter.prior.sample()
@@ -221,14 +222,11 @@ class SOMOGPModelMarginalized(BaseModel):
         x_data: Input array with shape (n,d+1) where d is the input dimension and n the number of training points
         y_data: Label array with shape (n,1) where n is the number of training points
         """
-        logger.info("-Infer")
+        logger.debug("-Infer")
         self.build_model(x_data, y_data)
         self.hmc_helper = gpflow.optimizers.SamplingHelper(self.log_posterior_density, self.model.trainable_parameters)
         hmc = tfp.mcmc.HamiltonianMonteCarlo(self.hmc_helper.target_log_prob_fn, num_leapfrog_steps=10, step_size=0.01)
-        adaptive_hmc = tfp.mcmc.SimpleStepSizeAdaptation(
-            hmc, num_adaptation_steps=10, target_accept_prob=f64(self.target_acceptance_prob), adaptation_rate=0.1
-        )
-
+        adaptive_hmc = tfp.mcmc.SimpleStepSizeAdaptation(hmc, num_adaptation_steps=10, target_accept_prob=f64(self.target_acceptance_prob), adaptation_rate=0.1)
         # @TODO: test if this function declaration is guilty for memory leaks
         @tf.function
         def run_chain_fn():
@@ -245,14 +243,14 @@ class SOMOGPModelMarginalized(BaseModel):
         while not inference_success:
             self.initialize_first_sample()
             try:
-                logger.info("-Start sampling")
+                logger.debug("-Start sampling")
                 self.samples, traces = run_chain_fn()
                 inference_success = True
             except:
                 logger.error("ERROR in MCMC sampling - repeat")
         self.parameter_samples = self.hmc_helper.convert_to_constrained_values(self.samples)
         self.param_to_name = {param: name for name, param in gpflow.utilities.parameter_dict(self.model).items()}
-        logger.info("-Inference done")
+        logger.debug("-Inference done")
         if self.print_posterior_summary:
             self.print_parameter_sample_summary()
         if self.plot_posterior:
@@ -352,7 +350,7 @@ class SOMOGPModelMarginalized(BaseModel):
             param_names.append(param_name)
         return self.parameter_samples, param_names
 
-    def estimate_model_evidence(self, x_data: np.array, y_data: np.array, sample_size=1000) -> np.float:
+    def estimate_model_evidence(self, x_data: np.array, y_data: np.array, sample_size=1000) -> float:
         """
         Sample estimate of the model evidence p(y|M,x)=intergal(p(y|theta,x,M)p(theta|M)d theta) - very bad estimate
         @TODO: provide better estimate - maybe fall back to laplace method
@@ -439,21 +437,19 @@ class SOMOGPModelMarginalized(BaseModel):
         mean array with shape (n,)
         sigma array with shape (n,)
         """
-        logger.info("Predict")
+        logger.debug("Predict")
         pred_mus_complete, pred_sigmas_complete = self.predict(x_test, self.prediction_quantity)
         n = x_test.shape[0]
         mus_over_inputs = []
         sigmas_over_inputs = []
         for i in range(0, n):
             mu = np.mean(pred_mus_complete[:, i])
-            var = np.mean(
-                np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0)
-            )
+            var = np.mean(np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0))
             mus_over_inputs.append(mu)
             sigmas_over_inputs.append(np.sqrt(var))
         return np.array(mus_over_inputs), np.array(sigmas_over_inputs)
 
-    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> np.float:
+    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> float:
         """
         Estimates entropy of full predictive distribution over all test points (batch mode) - predictive distribution is an n dim mixture of Gaussian
         - entropy is approximated with that of a gaussian distribution with same covariance matrix as the mixture
@@ -471,7 +467,7 @@ class SOMOGPModelMarginalized(BaseModel):
         entropy = gmm.entropy_gaussian_approx()
         return entropy
 
-    def hyper_batch_bald(self, x_test: np.array) -> np.float:
+    def hyper_batch_bald(self, x_test: np.array) -> float:
         pred_mus, pred_sigmas = self.predict_full_cov(x_test, self.prediction_quantity)
         n_samples = len(pred_mus)
         assert n_samples == self.num_samples
@@ -495,7 +491,7 @@ class SOMOGPModelMarginalized(BaseModel):
         Returns:
         np.array with shape (n,) containing the entropies for each test point
         """
-        logger.info("Calculate entropy")
+        logger.debug("Calculate entropy")
         pred_mus_complete, pred_sigmas_complete = self.predict(x_test, self.prediction_quantity)
         n = x_test.shape[0]
         m_posterior_draws = len(pred_mus_complete[:, 0])

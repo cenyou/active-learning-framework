@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from .base_oracle import BaseOracle, StandardOracle, Standard1DOracle, Standard2DOracle
+from .base_constrained_oracle import StandardConstrainedOracle
 from .base_object_oracle import BaseObjectOracle
 from .ackley import Ackley, Ackley3D, Ackley4D
 from .branin_hoo import BraninHoo
@@ -26,36 +27,46 @@ from .gp_model_cv_oracle import GPModelCVOracle
 from .gp_model_evidence_oracle import GPModelEvidenceOracle
 from .gp_oracle_1d import GPOracle1D
 from .gp_oracle_2d import GPOracle2D
+from .gp_oracle_hd import GPOracleHD
 from .gp_oracle_from_data import GPOracleFromData
 from .griewangk import Griewangk
 from .hartmann3 import Hartmann3
 from .hartmann6 import Hartmann6
 from .high_dim_additive import HighDimAdditive
+from .mnist_svm import MnistSVM
+from .mnist_svm_2d import MnistSVM2d
 from .mogp_oracle_1d import MOGP1DOracle
 from .mogp_oracle_2d import MOGP2DOracle
+from .mogp_oracle import MOGPOracle
 from .piece_wise_linear import PieceWiseLinear
 from .piece_wise_linear import FunctionType as PWLFunctionType
-
+#from .regularized_gp_oracle import RegularizedGPOracle # this Oracle import nonexist kernel configs, please fix
 from .rosenbrock import Rosenbrock, Rosenbrock3D, Rosenbrock4D
 from .safe_test_func import SafeTestFunc
 from .safe_test_func import FunctionType as STFFunctionType
 from .sinus import Sinus
-from .lsq import LSQMain, LSQConstraint1, LSQConstraint2
-from .simionescu import SimionescuMain, SimionescuConstraint
-from .townsend import TownsendMain, TownsendConstraint
+from .lsq import LSQMain, LSQConstraint1, LSQConstraint2, LSQ
+from .simionescu import SimionescuMain, SimionescuConstraint, Simionescu
+from .townsend import TownsendMain, TownsendConstraint, Townsend
+from .cart_pole import CartPole, CartPoleConstrained
+from .swing_up import SwingUp, SwingUpConstrained
+from .gas_transmission_compressor_design import GasTransmissionCompressorDesignMain, GasTransmissionCompressorDesignConstraint, GasTransmissionCompressorDesign
+from .high_pressure_fluid_system import HighPressureFluidSystemMain, HighPressureFluidSystem, HighPressureFluidSystemReduce, HighPressureFluidSystemReduceGPInterpolated
 
-from .normalize_decorator import OracleNormalizer
+from .helpers.normalize_decorator import OracleNormalizer
+from .helpers.constrained_sampler import ConstrainedSampler
 
-__all__ = [
+__all__=[
     "BaseOracle",
     "BaseObjectOracle",
     "StandardOracle",
     "Standard1DOracle",
     "Standard2DOracle",
+    "StandardConstrainedOracle",
     "OracleNormalizer",
-    "Ackley",
-    "Ackley3D",
-    "Ackley4D",
+    "ConstrainedSampler",
+
+    "Ackley", "Ackley3D", "Ackley4D",
     "BraninHoo",
     "DKTOracleType",
     "Eggholder",
@@ -69,27 +80,27 @@ __all__ = [
     "GPModelEvidenceOracle",
     "GPOracle1D",
     "GPOracle2D",
+    "GPOracleHD",
     "GPOracleFromData",
     "Griewangk",
     "Hartmann3",
     "Hartmann6",
     "HighDimAdditive",
-    "MnistSVMMnistSVM2d",
+    "MnistSVM"
+    "MnistSVM2d",
     "MOGP1DOracle",
     "MOGP2DOracle",
-    "PieceWiseLinear",
-    "PWLFunctionType",
-    "Rosenbrock",
-    "Rosenbrock3D",
-    "Rosenbrock4D",
-    "SafeTestFunc",
-    "STFFunctionType",
+    "MOGPOracle",
+    "PieceWiseLinear", "PWLFunctionType",
+    #"RegularizedGPOracle", # this Oracle import nonexist kernel configs, please fix
+    "Rosenbrock", "Rosenbrock3D", "Rosenbrock4D",
+    "SafeTestFunc", "STFFunctionType",
     "Sinus",
-    "LSQMain",
-    "LSQConstraint1",
-    "LSQConstraint2",
-    "SimionescuMain",
-    "SimionescuConstraint",
-    "TownsendMain",
-    "TownsendConstraint",
+    "LSQMain", "LSQConstraint1", "LSQConstraint2", "LSQ",
+    "SimionescuMain", "SimionescuConstraint", "Simionescu",
+    "TownsendMain", "TownsendConstraint", "Townsend",
+    "CartPole", "CartPoleConstrained",
+    "SwingUp", "SwingUpConstrained",
+    "HighPressureFluidSystemMain", "HighPressureFluidSystem", "HighPressureFluidSystemReduce", "HighPressureFluidSystemReduceGPInterpolated",
+    "GasTransmissionCompressorDesignMain", "GasTransmissionCompressorDesignConstraint", "GasTransmissionCompressorDesign"
 ]

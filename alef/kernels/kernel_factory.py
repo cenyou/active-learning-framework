@@ -12,12 +12,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from tensorflow.python.ops.gen_math_ops import Add
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
-from alef.configs.kernels.grammar_tree_kernel_kernel_configs import (
-    KernelGrammarSubtreeKernelConfig,
-    OptimalTransportGrammarKernelConfig,
-)
-from alef.configs.kernels.kernel_list_configs import BasicKernelListConfig, SEKernelViaKernelListConfig
+from alef.configs.kernels.grammar_tree_kernel_kernel_configs import KernelGrammarSubtreeKernelConfig, OptimalTransportGrammarKernelConfig
 from alef.configs.kernels.matern32_configs import BasicMatern32Config
 from alef.configs.kernels.rational_quadratic_configs import BasicRQConfig
 from alef.configs.kernels.spectral_mixture_kernel_config import BasicSMKernelConfig
@@ -27,7 +24,9 @@ from alef.kernels.deep_kernels.base_deep_kernel import BaseDeepKernel
 from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
 from alef.kernels.kernel_kernel_grammar_tree import (
     KernelGrammarSubtreeKernel,
+    MultiplyKernelGrammarKernels,
     OptimalTransportKernelKernel,
+    SumKernelKernelGrammarTree,
 )
 from alef.configs.kernels.wami_configs import BasicWamiConfig
 from alef.configs.kernels.hhk_configs import BasicHHKConfig
@@ -51,7 +50,7 @@ from alef.configs.kernels.rbf_object_configs import BasicRBFObjectConfig
 from alef.configs.kernels.hellinger_kernel_kernel_configs import BasicHellingerKernelKernelConfig
 from alef.kernels.kernel_kernel_hellinger import KernelKernelHellinger
 from alef.kernels.periodic_kernel import PeriodicKernel
-from alef.configs.kernels.periodic_configs import BasicPeriodicConfig
+from alef.configs.kernels.periodic_configs import BasicPeriodicConfig, PeriodicWithPriorConfig
 from alef.configs.kernels.deep_kernels.base_deep_kernel_config import BaseDeepKernelConfig
 from alef.kernels.warped_single_index_kernel import WarpedSingleIndexKernel
 from alef.kernels.weighted_additive_kernel import WeightedAdditiveKernel
@@ -60,33 +59,24 @@ from alef.configs.kernels.multi_output_kernels.coregionalization_kernel_configs 
     BasicCoregionalizationSOConfig,
     BasicCoregionalizationMOConfig,
 )
-from alef.kernels.multi_output_kernels.coregionalization_kernel import (
-    CoregionalizationSOKernel,
-    CoregionalizationMOKernel,
-)
-from alef.configs.kernels.multi_output_kernels.coregionalization_1latent_kernel_configs import (
-    BasicCoregionalization1LConfig,
-)
+from alef.kernels.multi_output_kernels.coregionalization_kernel import CoregionalizationSOKernel, CoregionalizationMOKernel
+from alef.configs.kernels.multi_output_kernels.coregionalization_1latent_kernel_configs import BasicCoregionalization1LConfig
 from alef.kernels.multi_output_kernels.coregionalization_1latent_kernel import Coregionalization1LKernel
-from alef.configs.kernels.multi_output_kernels.coregionalization_Platent_kernel_configs import (
-    BasicCoregionalizationPLConfig,
-)
+from alef.configs.kernels.multi_output_kernels.coregionalization_Platent_kernel_configs import BasicCoregionalizationPLConfig
 from alef.kernels.multi_output_kernels.coregionalization_Platent_kernel import CoregionalizationPLKernel
 from alef.configs.kernels.multi_output_kernels.multi_source_additive_kernel_configs import BasicMIAdditiveConfig
 from alef.kernels.multi_output_kernels.multi_source_additive_kernel import MIAdditiveKernel
-from alef.configs.kernels.multi_output_kernels.coregionalization_transfer_kernel_config import (
-    BasicCoregionalizationTransferConfig,
-)
+from alef.configs.kernels.multi_output_kernels.coregionalization_transfer_kernel_config import BasicCoregionalizationTransferConfig
 from alef.kernels.multi_output_kernels.coregionalization_transfer_kernel import CoregionalizationTransferKernel
 from alef.configs.kernels.multi_output_kernels.flexible_transfer_kernel_config import BasicFlexibleTransferConfig
 from alef.kernels.multi_output_kernels.flexible_transfer_kernel import FlexibleTransferKernel
 from alef.configs.kernels.multi_output_kernels.fpacoh_kernel_config import BasicFPACOHKernelConfig
 from alef.kernels.multi_output_kernels.fpacoh_kernel import FPACOHKernel
 
-
 class KernelFactory:
     @staticmethod
     def build(kernel_config: BaseKernelConfig):
+
         if isinstance(kernel_config, BasicHHKConfig):
             base_kernel_config = kernel_config.base_kernel_config
             base_kernel_config.input_dimension = kernel_config.input_dimension
@@ -119,9 +109,7 @@ class KernelFactory:
             kernel = LinearKernel(**kernel_config.dict())
             return kernel
         elif isinstance(kernel_config, BaseDeepKernelConfig):
-            feature_extractor = FeatureExtractorFactory.build(
-                kernel_config.feature_extractor_config, kernel_config.input_dimension
-            )
+            feature_extractor = FeatureExtractorFactory.build(kernel_config.feature_extractor_config, kernel_config.input_dimension)
             kernel = BaseDeepKernel(feature_extractor=feature_extractor, **kernel_config.dict())
             return kernel
         elif isinstance(kernel_config, BasicRBFObjectConfig):
@@ -167,16 +155,6 @@ class KernelFactory:
         elif isinstance(kernel_config, BasicSMKernelConfig):
             kernel = SpectralMixtureKernel(**kernel_config.dict())
             return kernel
-        elif isinstance(kernel_config, BasicKernelListConfig):
-            from alef.models.amortized_infer_structured_kernels.gp.base_kernels import (
-                transform_kernel_list_to_expression,
-            )
-
-            expanded_kernel_list = [kernel_config.kernel_list for i in range(0, kernel_config.input_dimension)]
-            kernel_expression = transform_kernel_list_to_expression(
-                expanded_kernel_list, add_prior=kernel_config.add_prior, use_gpflow=True
-            )
-            return kernel_expression.get_kernel()
         elif isinstance(kernel_config, BasicMIAdditiveConfig):
             kernel = MIAdditiveKernel(**kernel_config.dict())
             return kernel
@@ -197,6 +175,7 @@ class KernelFactory:
 
 
 if __name__ == "__main__":
+
     config = SEKernelViaKernelListConfig(input_dimension=2)
     print(config.dict())
     kernel = KernelFactory.build(config)

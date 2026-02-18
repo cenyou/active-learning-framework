@@ -12,22 +12,23 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import Tuple, Union, Sequence
+from typing import Tuple, Union, List, Sequence
 import numpy as np
+import tensorflow as tf
 import gpflow
 
+gpflow.config.set_default_float(np.float64)
+f64 = gpflow.utilities.to_default_float
 from tensorflow_probability import distributions as tfd
 from gpflow.utilities import set_trainable
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 from alef.kernels.scale_interface import StationaryKernelGPflow
 
-gpflow.config.set_default_float(np.float64)
-f64 = gpflow.utilities.to_default_float
-
 
 class RBFKernel(BaseElementaryKernel, StationaryKernelGPflow):
-    has_fourier_feature = True
 
+    has_fourier_feature = True
+    
     def __init__(
         self,
         input_dimension: int,
@@ -43,8 +44,10 @@ class RBFKernel(BaseElementaryKernel, StationaryKernelGPflow):
         name: str,
         **kwargs,
     ):
-        super().__init__(input_dimension, active_on_single_dimension, active_dimension, name)
-        if hasattr(base_lengthscale, "__len__"):
+        super().__init__(
+            input_dimension, active_on_single_dimension, active_dimension, name
+        )
+        if hasattr(base_lengthscale, '__len__'):
             if len(base_lengthscale) == 1:
                 lg = f64(np.repeat(base_lengthscale[0], self.num_active_dimensions))
             else:
@@ -52,16 +55,16 @@ class RBFKernel(BaseElementaryKernel, StationaryKernelGPflow):
                 lg = f64(base_lengthscale)
         else:
             lg = f64(np.repeat(base_lengthscale, self.num_active_dimensions))
-
+        
         self.kernel = gpflow.kernels.RBF(
             lengthscales=lg,
             variance=f64([base_variance]),
         )
         if fix_lengthscale:
-            set_trainable(self.kernel.lengthscales, False)
+            set_trainable( self.kernel.lengthscales, False)
         if fix_variance:
-            set_trainable(self.kernel.variance, False)
-
+            set_trainable( self.kernel.variance, False)
+        
         if add_prior:
             a_lengthscale, b_lengthscale = lengthscale_prior_parameters
             a_variance, b_variance = variance_prior_parameters

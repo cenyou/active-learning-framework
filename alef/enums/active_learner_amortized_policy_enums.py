@@ -19,7 +19,7 @@ class DomainWarpperType(Enum):
     SIGMOID = 1
     TANH = 2
 
-
+"""
 class LossType(Enum):
     DAD = 1
     DAD_SCORE = 2
@@ -29,8 +29,30 @@ class LossType(Enum):
     GP_MI2 = 14
     GP_MI_ENTROPY1 = 101
     GP_MI_ENTROPY2 = 102
+"""
 
+class SafetyProbability(Enum):
+    TRIVIAL = 1
+    SIGMOID = 2
+    SIGMOID_SOFTPLUS = 3
+    GP_POSTERIOR = 4
+
+class SafetyProbabilityWrapper(Enum):
+    NONE = 0
+    PRODUCT = 1 # min (infoloss)*p(safe)
+    LOGCONDITION = 2 # min infoloss - log p(safe)
+    JOINTPROBABILITY = 3 # min infoloss + log p(unsafe)
+
+class GPMean(Enum):
+    ZERO = 0
 
 class GPSampleMethod(Enum):
     RFF = 1
     GP = 2
+
+class LengthscaleDistribution(Enum):
+    UNIFORM = 1
+    GAMMA = 2
+    GAMMA_SMOOTH = 3
+    PERCENTAGE = 4
+

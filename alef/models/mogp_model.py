@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 import gpflow
@@ -21,14 +21,17 @@ from gpflow.utilities import print_summary, set_trainable
 
 from gpflow.kernels import MultioutputKernel
 
+from alef.utils.utils import normal_entropy
 from alef.utils.gp_paramater_cache import GPParameterCache
 from alef.models.base_model import BaseModel
 from alef.models.mo_gpr import MOGPR
+from alef.kernels.multi_output_kernels.coregionalization_kernel import CoregionalizationMOKernel
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
-from alef.enums.global_model_enums import PredictionQuantity
+from alef.enums.global_model_enums import InitializationType, PredictionQuantity
 import logging
+from alef.utils.custom_logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class MOGPModel(BaseModel):
@@ -60,7 +63,7 @@ class MOGPModel(BaseModel):
         n_starts_for_multistart_opt: int = 5,
         set_prior_on_observation_noise=False,
         prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y,
-        **kwargs,
+        **kwargs
     ):
         self.kernel = kernel
         self.kernel_copy = gpflow.utilities.deepcopy(kernel)
@@ -118,6 +121,11 @@ class MOGPModel(BaseModel):
         """
         self.n_starts_for_multistart_opt = n_starts
 
+    def set_model_data(self, x_data: np.array, y_data: np.array):
+        assert hasattr(self, 'model')
+        assert isinstance(self.model, MOGPR)
+        self.model.data = gpflow.models.util.data_input_to_tensor((x_data, y_data))
+
     def infer(self, x_data: np.array, y_data: np.array):
         """
         Main entrance method for learning the model - training methods are called if hp should be done otherwise only gpflow model is build
@@ -128,26 +136,16 @@ class MOGPModel(BaseModel):
         """
         model = MOGPR
         if self.use_mean_function:
-            self.model = model(
-                data=(x_data, y_data),
-                kernel=self.kernel,
-                mean_function=self.mean_function,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
+            self.model = model(data=(x_data, y_data), kernel=self.kernel, mean_function=self.mean_function, noise_variance=np.power(self.observation_noise, 2.0))
             set_trainable(self.model.mean_function.c, False)
         else:
-            self.model = model(
-                data=(x_data, y_data),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.observation_noise, 2.0),
-            )
-
+            self.model = model(data=(x_data, y_data), kernel=self.kernel, mean_function=None, noise_variance=np.power(self.observation_noise, 2.0))
+        
         set_trainable(self.model.likelihood.variance, self.train_likelihood_variance)
-
+        
         if self.set_prior_on_observation_noise:
             self.model.likelihood.variance.prior = tfd.Exponential(1 / np.power(self.expected_observation_noise, 2.0))
-
+        
         if self.optimize_hps:
             if self.perform_multi_start_optimization:
                 self.multi_start_optimization(self.n_starts_for_multistart_opt, self.pertubation_for_multistart_opt)
@@ -171,7 +169,7 @@ class MOGPModel(BaseModel):
                 print_summary(self.model)
         optimizer = gpflow.optimizers.Scipy()
         optimization_success = False
-        while not optimization_success:
+        while not optimization_success and len(self.model.trainable_variables) > 0:
             try:
                 opt_res = optimizer.minimize(self.model.training_loss, self.model.trainable_variables)
                 optimization_success = opt_res.success
@@ -191,11 +189,11 @@ class MOGPModel(BaseModel):
             return self.model.training_loss() + self.model.kernel.regularization_loss(self.model.data[0])
         else:
             return self.model.training_loss()
-
+    
     def print_model_summary(self):
         if logger.isEnabledFor(logging.DEBUG):
             print_summary(self.model)
-
+    
     def multi_start_optimization(self, n_starts: int, pertubation_factor: float):
         """
         Method for performing optimization (Type-2 ML) of kernel hps with multiple initial values - self.optimzation method is
@@ -217,16 +215,16 @@ class MOGPModel(BaseModel):
                     self.pertube_parameters(self.pertubation_at_start)
                 self.multi_start_losses = []
                 for i in range(0, n_starts):
-                    logger.info(f"Optimization repeat {i + 1}/{n_starts}")
+                    logger.debug(f"Optimization repeat {i+1}/{n_starts}")
                     self.optimize(True, pertubation_factor)
                     loss = self.training_loss()
                     self.parameter_cache.store_parameters_from_model(self.model, loss, add_loss_value=True)
                     self.multi_start_losses.append(loss)
                     if self.add_kernel_hp_regularizer:
-                        logger.info(f"Loss for run: {loss}")
+                        logger.debug(f"Loss for run: {loss}")
                     else:
                         log_marginal_likelihood = -1 * loss
-                        logger.info(f"Log marginal likeli for run: {log_marginal_likelihood}")
+                        logger.debug(f"Log marginal likeli for run: {log_marginal_likelihood}")
                 self.parameter_cache.load_best_parameters_to_model(self.model)
                 logger.debug("Chosen parameter values:")
                 self.print_model_summary()
@@ -238,7 +236,7 @@ class MOGPModel(BaseModel):
             except:
                 logger.error("Error in multistart optimization - repeat")
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         """
         Estimates the model evidence - always retrieves marg likelihood, also when HPs are provided with prior!!
 
@@ -268,9 +266,7 @@ class MOGPModel(BaseModel):
             unconstrained_value = variable.numpy()
             factor = 1 + np.random.uniform(-1 * factor_bound, factor_bound, size=unconstrained_value.shape)
             if np.isclose(unconstrained_value, 0.0, rtol=1e-07, atol=1e-09).all():
-                new_unconstrained_value = (
-                    unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)
-                ) * factor
+                new_unconstrained_value = (unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)) * factor
             else:
                 new_unconstrained_value = unconstrained_value * factor
             variable.assign(new_unconstrained_value)
@@ -311,7 +307,7 @@ class MOGPModel(BaseModel):
 
         return entropy
 
-    def calculate_complete_information_gain(self, x_data: np.array) -> np.float:
+    def calculate_complete_information_gain(self, x_data: np.array) -> float:
         raise NotImplementedError
 
     def predictive_log_likelihood(self, x_test: np.array, y_test: np.array) -> np.array:

@@ -12,13 +12,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from alef.kernels.kernel_grammar.kernel_grammar import (
-    BaseKernelGrammarExpression,
-    KernelGrammarExpression,
-    KernelGrammarOperator,
-)
+from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression, KernelGrammarExpression, KernelGrammarOperator
 from alef.kernels.kernel_grammar.kernel_grammar_search_spaces import (
     BaseKernelGrammarSearchSpace,
+    CKSWithRQSearchSpace,
     CKSTimeSeriesSearchSpace,
 )
 
@@ -50,8 +47,8 @@ class ExpressionStringParser:
         has_subexpression = True
         while has_subexpression:
             replace_tag = "{}_{}".format(self.replace_tag_prefix, i)
-            sub_expression_string, replaced_expression_string, has_subexpression = (
-                self.extract_and_replace_sub_expression(replaced_expression_string, replace_tag)
+            sub_expression_string, replaced_expression_string, has_subexpression = self.extract_and_replace_sub_expression(
+                replaced_expression_string, replace_tag
             )
             if has_subexpression:
                 subexpression_string_dict[replace_tag] = self.parse_subexpression_string(sub_expression_string)
@@ -59,9 +56,7 @@ class ExpressionStringParser:
         last_index = i - 1
         return subexpression_string_dict, last_index
 
-    def kernel_expression_from_dict_resolver(
-        self, subexpression_string_dict, index_replace_tag: int
-    ) -> BaseKernelGrammarExpression:
+    def kernel_expression_from_dict_resolver(self, subexpression_string_dict, index_replace_tag: int) -> BaseKernelGrammarExpression:
         replace_tag = "{}_{}".format(self.replace_tag_prefix, index_replace_tag)
         subexpression_tuple = subexpression_string_dict[replace_tag]
         sub_expression_string_0 = subexpression_tuple[0]
@@ -79,9 +74,7 @@ class ExpressionStringParser:
             index = sub_expression_string_1.split("_")[1]
             expression_1 = self.kernel_expression_from_dict_resolver(subexpression_string_dict, index)
 
-        expression = KernelGrammarExpression(
-            expression_0, expression_1, self.operator_dict[sub_expression_operator_string]
-        )
+        expression = KernelGrammarExpression(expression_0, expression_1, self.operator_dict[sub_expression_operator_string])
         return expression
 
     def parse_subexpression_string(self, subexpression_string: str):
@@ -90,6 +83,7 @@ class ExpressionStringParser:
         return symbol_tuple
 
     def extract_and_replace_sub_expression(self, expression_string: str, replace_tag: str):
+        current_subexpression_letter_list = []
         expression_start_index = 0
         expression_end_index = 0
         has_subexpression = False
@@ -101,9 +95,7 @@ class ExpressionStringParser:
                 expression_end_index = index + 1
                 break
         sub_expression_string = expression_string[expression_start_index:expression_end_index]
-        replaced_expression_string = (
-            expression_string[:expression_start_index] + replace_tag + expression_string[expression_end_index:]
-        )
+        replaced_expression_string = expression_string[:expression_start_index] + replace_tag + expression_string[expression_end_index:]
         return sub_expression_string, replaced_expression_string, has_subexpression
 
 

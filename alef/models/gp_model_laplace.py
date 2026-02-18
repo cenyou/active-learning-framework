@@ -14,29 +14,33 @@
 
 import logging
 import traceback
+from gpflux import optimization
+from matplotlib.pyplot import axis
+from numpy.core.fromnumeric import mean
 from alef.kernels.input_initialized_kernel_interface import InputInitializedKernelInterface
 from alef.oracles.exponential_2d import Exponential2D
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 import gpflow
-from gpflow.utilities import print_summary, set_trainable
+from gpflow.utilities import print_summary, set_trainable, to_default_float
 import numpy as np
 
+from alef.utils.gp_paramater_cache import GPParameterCache
 
+tf.executing_eagerly()
 from enum import Enum
 from typing import Tuple
 
 from alef.kernels.regularized_kernel_interface import RegularizedKernelInterface
 from alef.utils.utils import normal_entropy
-from alef.utils.ground_truth_function import GroundTruthFunction, FunctionType
 from alef.models.base_model import BaseModel
 from alef.utils.gaussian_mixture_density_nd import GaussianMixtureDensityNd
+from scipy.optimize import minimize
 from scipy.stats import multivariate_normal
 from alef.models.batch_model_interface import BatchModelInterace
 
-tf.executing_eagerly()
-
-logger = logging.getLogger(__name__)
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class PredictionType(Enum):
@@ -57,7 +61,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         prediction_type: PredictionType = PredictionType.NORMAL_APPROXIMATION,
         n_starts_for_multistart_opt: int = 10,
         pertubation_for_multistart_opt: float = 0.5,
-        **kwargs,
+        **kwargs
     ):
         self.kernel = gpflow.utilities.deepcopy(kernel)
         self.kernel_copy = gpflow.utilities.deepcopy(kernel)
@@ -94,10 +98,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
             set_trainable(self.model.mean_function.c, False)
         else:
             self.model = gpflow.models.GPR(
-                data=(x_data, y_data),
-                kernel=self.kernel,
-                mean_function=None,
-                noise_variance=np.power(self.observation_noise, 2.0),
+                data=(x_data, y_data), kernel=self.kernel, mean_function=None, noise_variance=np.power(self.observation_noise, 2.0)
             )
 
         if self.train_likelihood_variance:
@@ -163,8 +164,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
                     parameter_values = self.get_parameter_numpy_values()
                     parameters_over_runs.append(parameter_values)
                     log_posterior_density = self.log_posterior_density()
-                    logger.info("Log posterior for run:")
-                    logger.info(log_posterior_density)
+                    logger.info(f"Log posterior for run: {log_posterior_density}")
                     log_posterior_densities.append(log_posterior_density)
                 best_run_index = np.argmax(np.array(log_posterior_densities))
                 best_run_parameters = parameters_over_runs[best_run_index]
@@ -215,9 +215,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         unnormalized_posterior = np.exp(self.log_posterior_density())
         n_dim_param = self.posterior_covariance_matrix.shape[0]
         model_evidence = (
-            np.sqrt(np.power(2 * np.pi, n_dim_param))
-            * np.sqrt(np.linalg.det(self.posterior_covariance_matrix))
-            * unnormalized_posterior
+            np.sqrt(np.power(2 * np.pi, n_dim_param)) * np.sqrt(np.linalg.det(self.posterior_covariance_matrix)) * unnormalized_posterior
         )
         logger.info("Model evidence: " + str(model_evidence))
         return model_evidence
@@ -228,9 +226,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         log_posterior_density = self.log_posterior_density()
         n_dim_param = self.posterior_covariance_matrix.shape[0]
         log_model_evidence = (
-            log_posterior_density
-            - 0.5 * np.linalg.slogdet(-1 * self.hessian)[1]
-            + n_dim_param * 0.5 * np.math.log(2 * np.pi)
+            log_posterior_density - 0.5 * np.linalg.slogdet(-1 * self.hessian)[1] + n_dim_param * 0.5 * np.math.log(2 * np.pi)
         )
         return log_model_evidence
 
@@ -254,9 +250,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
     def predictive_dist_sample_based(self, x_test: np.array, n_samples=500) -> Tuple[np.array, np.array]:
         pred_mus_over_samples = []
         pred_sigmas_over_samples = []
-        hp_posterior = tfd.MultivariateNormalFullCovariance(
-            np.concatenate(self.map_variables), self.posterior_covariance_matrix
-        )
+        hp_posterior = tfd.MultivariateNormalFullCovariance(np.concatenate(self.map_variables), self.posterior_covariance_matrix)
         for j in range(0, n_samples):
             posterior_sample = hp_posterior.sample()
             self.set_variables_from_unfolded_array(posterior_sample)
@@ -272,9 +266,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         sigmas_over_inputs = []
         for i in range(0, n):
             mu = np.mean(pred_mus_complete[:, i])
-            var = np.mean(
-                np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0)
-            )
+            var = np.mean(np.power(pred_mus_complete[:, i], 2.0) + np.power(pred_sigmas_complete[:, i], 2.0) - np.power(mu, 2.0))
             mus_over_inputs.append(mu)
             sigmas_over_inputs.append(np.sqrt(var))
         return np.array(mus_over_inputs), np.array(sigmas_over_inputs)
@@ -295,9 +287,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         marginal_sigmas = []
         logger.debug("-Calculation done")
         for i in range(0, n):
-            marginal_var = self.calculate_approx_marginal_pred_variance_at_single_point(
-                vars_f_map[i], mean_gradients[i], var_gradients[i]
-            )
+            marginal_var = self.calculate_approx_marginal_pred_variance_at_single_point(vars_f_map[i], mean_gradients[i], var_gradients[i])
             marginal_sigma = np.sqrt(marginal_var)
             marginal_sigmas.append(marginal_sigma)
         pred_sigma = np.array(marginal_sigmas)
@@ -321,12 +311,8 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
             mean_tensor, var_tensor = self.model.predict_f(x_grid)
             mean_tensor_squeezed = tf.squeeze(mean_tensor)
             var_tensor_squeezed = tf.squeeze(var_tensor)
-        mean_gradients_tuple = tape.jacobian(
-            mean_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False
-        )
-        var_gradient_tuple = tape.jacobian(
-            var_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False
-        )
+        mean_gradients_tuple = tape.jacobian(mean_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False)
+        var_gradient_tuple = tape.jacobian(var_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False)
         mean_gradients_list = []
         var_gradients_list = []
         for mean_gradient in mean_gradients_tuple:
@@ -350,9 +336,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
     def predict_full_cov(self, x_test: np.array) -> Tuple[np.array, np.array]:
         mean_map, cov_map = self.model.predict_f(x_test, full_cov=True)
         mean_gradient, cov_gradients = self.mean_and_cov_gradients(x_test)
-        marg_cov = self.calulate_approx_marginal_pred_covariance_at_single_point(
-            np.squeeze(cov_map.numpy()), mean_gradient, cov_gradients
-        )
+        marg_cov = self.calulate_approx_marginal_pred_covariance_at_single_point(np.squeeze(cov_map.numpy()), mean_gradient, cov_gradients)
         return np.squeeze(mean_map.numpy()), marg_cov, np.squeeze(cov_map.numpy())
 
     def mean_and_cov_gradients(self, x_test):
@@ -362,12 +346,8 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
             mean_tensor_squeezed = tf.squeeze(mean_tensor, axis=-1)
             cov_tensor_squeezed = tf.squeeze(cov_tensor, axis=0)
 
-        mean_gradients_tuple = tape.jacobian(
-            mean_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False
-        )
-        cov_gradient_tuple = tape.jacobian(
-            cov_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False
-        )
+        mean_gradients_tuple = tape.jacobian(mean_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False)
+        cov_gradient_tuple = tape.jacobian(cov_tensor_squeezed, self.model.trainable_variables, experimental_use_pfor=False)
 
         mean_gradients_list = []
         cov_gradients_list = []
@@ -399,17 +379,13 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
             for i in range(0, n_param):
                 cov_gradient_for_parameter = cov_gradients[:, :, i]
                 mean_gradient_for_parameter = np.expand_dims(mean_gradient[:, i], axis=1)
-                a_paramter = mean_gradient_for_parameter + np.matmul(
-                    np.matmul(cov_gradient_for_parameter, inv_cov_map), point
-                )
+                a_paramter = mean_gradient_for_parameter + np.matmul(np.matmul(cov_gradient_for_parameter, inv_cov_map), point)
                 a_s.append(a_paramter)
             A = np.concatenate(a_s, axis=1)
             marg_cov = cov_f_map + np.matmul(np.matmul(A, self.posterior_covariance_matrix), A.T)
             marg_covs.append(marg_cov)
         gmm = GaussianMixtureDensityNd(
-            np.repeat(1 / len(eval_points), len(eval_points)),
-            np.array([np.zeros(vars.shape)] * len(eval_points)),
-            np.array(marg_covs),
+            np.repeat(1 / len(eval_points), len(eval_points)), np.array([np.zeros(vars.shape)] * len(eval_points)), np.array(marg_covs)
         )
         marg_cov_matched = gmm.covariance_matrix()
         return marg_cov_matched
@@ -426,7 +402,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         map_entropy = multivariate_normal(mean_map, cov_map).entropy()
         return marg_entropy - map_entropy
 
-    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> np.float:
+    def entropy_predictive_dist_full_cov(self, x_test: np.array) -> float:
         mean_map, cov_map = self.model.predict_f(x_test, full_cov=True)
         mean_gradient, cov_gradients = self.mean_and_cov_gradients(x_test)
         marg_cov = self.calulate_approx_marginal_pred_covariance_at_single_point(
@@ -447,9 +423,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
         marginal_entropies = []
         map_entropies = []
         for i in range(0, n):
-            marginal_var = self.calculate_approx_marginal_pred_variance_at_single_point(
-                vars_f_map[i], mean_gradients[i], var_gradients[i]
-            )
+            marginal_var = self.calculate_approx_marginal_pred_variance_at_single_point(vars_f_map[i], mean_gradients[i], var_gradients[i])
             if use_untransformed_information_gain:
                 marginal_entropy = 0.5 * np.log(2 * np.pi * np.exp(1.0) * marginal_var)
                 map_entropy = 0.5 * np.log(2 * np.pi * np.exp(1.0) * vars_f_map[i])
@@ -522,9 +496,7 @@ class GPModelLaplace(BaseModel, BatchModelInterace):
             unconstrained_value = variable.numpy()
             factor = 1 + np.random.uniform(-1 * factor_bound, factor_bound, size=unconstrained_value.shape)
             if np.isclose(unconstrained_value, 0.0, rtol=1e-07, atol=1e-09).all():
-                new_unconstrained_value = (
-                    unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)
-                ) * factor
+                new_unconstrained_value = (unconstrained_value + np.random.normal(0, 0.05, size=unconstrained_value.shape)) * factor
             else:
                 new_unconstrained_value = unconstrained_value * factor
             variable.assign(new_unconstrained_value)
@@ -534,9 +506,6 @@ if __name__ == "__main__":
     gt_function = Exponential2D(0.01)
     x_data, y_data = gt_function.get_random_data(40)
     # print(y_data.shape)
-    gt_function = GroundTruthFunction(FunctionType.SIN_LIN, 0.1)
-    # x_data,y_data = gt_function.produce_data(0,10,10)
-    # x_data = np.expand_dims(x_data,axis=1)
     hyper_model = GPModelLaplace(gpflow.kernels.RBF(lengthscales=[1.0, 1.0], variance=[1.0]), 0.01)
     x_test = np.array([[1.0, 0.5], [0.0, 0.0]])
     hyper_model.infer(x_data, np.expand_dims(y_data, axis=1))

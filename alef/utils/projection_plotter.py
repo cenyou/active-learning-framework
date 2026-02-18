@@ -12,7 +12,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from matplotlib.pyplot import plot
 import numpy as np
+from alef.kernels.kernel_factory import KernelFactory
 from alef.oracles.gp_oracle_2d import GPOracle2D
 from alef.models.base_model import BaseModel
 from alef.models.model_factory import ModelFactory

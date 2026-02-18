@@ -12,16 +12,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from lib2to3.pytree import Base
 from typing import Tuple
 import gpflow
+from gpflow.utilities.traversal import print_summary
 
+f64 = gpflow.utilities.to_default_float
 import numpy as np
 from tensorflow_probability import distributions as tfd
 from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 from alef.kernels.scale_interface import StationaryKernelGPflow
 from gpflow.utilities import set_trainable
-
-f64 = gpflow.utilities.to_default_float
 
 
 class PeriodicKernel(BaseElementaryKernel, StationaryKernelGPflow):
@@ -41,7 +42,7 @@ class PeriodicKernel(BaseElementaryKernel, StationaryKernelGPflow):
         active_on_single_dimension: bool,
         active_dimension: int,
         name: str,
-        **kwargs,
+        **kwargs
     ):
         super().__init__(input_dimension, active_on_single_dimension, active_dimension, name)
 

@@ -1,22 +1,8 @@
-# Copyright (c) 2024 Robert Bosch GmbH
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import numpy as np
 import torch
 import scipy.stats
 import copy
-from alef.models.f_pacoh_map_gp.util import _handle_input_dimensionality
+from alef.models.f_pacoh_map_gp.util import get_logger, _handle_input_dimensionality
 from typing import Tuple, Dict, List
 
 """
@@ -33,8 +19,8 @@ Copyright (c) 2022 Jonas Rothfuss, licensed under the MIT License
 
 """
 
-
 class RegressionModel:
+
     def __init__(self, normalize_data=True, random_state=None):
         self.normalize_data = normalize_data
         self.input_dim = None
@@ -99,7 +85,7 @@ class RegressionModel:
         elif y.ndim == 1:
             pass
         else:
-            raise AssertionError("y must not have more than 1 dim")
+            raise AssertionError('y must not have more than 1 dim')
         return X, y
 
     def add_data(self, X, y):
@@ -144,20 +130,19 @@ class RegressionModel:
             self.x_mean, self.y_mean = np.zeros(self.input_dim), np.zeros(1)
             self.x_std, self.y_std = np.ones(self.input_dim), np.ones(1)
         else:
-            self.x_mean = normalization_stats_dict["x_mean"].reshape((self.input_dim,))
-            self.y_mean = normalization_stats_dict["y_mean"].squeeze()
-            self.x_std = normalization_stats_dict["x_std"].reshape((self.input_dim,))
-            self.y_std = normalization_stats_dict["y_std"].squeeze()
+            self.x_mean = normalization_stats_dict['x_mean'].reshape((self.input_dim,))
+            self.y_mean = normalization_stats_dict['y_mean'].squeeze()
+            self.x_std = normalization_stats_dict['x_std'].reshape((self.input_dim,))
+            self.y_std = normalization_stats_dict['y_std'].squeeze()
 
     def _calib_error(self, pred_dist_vectorized, test_t_tensor):
         return _calib_error(pred_dist_vectorized, test_t_tensor)
 
     @staticmethod
-    def _calibration_sharpness(
-        pred_mean, pred_std, test_y: np.ndarray, min_conf_level: float = 0.5, num_conf_levels: int = 20
-    ) -> Tuple[float, float]:
+    def _calibration_sharpness(pred_mean, pred_std, test_y: np.ndarray, min_conf_level: float = 0.5,
+                               num_conf_levels: int = 20) -> Tuple[float, float]:
         # compute what percentage of the tested uncertainty estimates are calibrated and how sharp they are on average
-        assert 0.0 <= min_conf_level < 1.0
+        assert 0. <= min_conf_level < 1.
         conf_levels = np.linspace(min_conf_level, 1, num_conf_levels)
         z2 = ((pred_mean - test_y.flatten()) / pred_std) ** 2
         z2_threshold = scipy.stats.chi2.ppf(conf_levels, 1)
@@ -167,14 +152,12 @@ class RegressionModel:
         avg_std = float(np.mean(pred_std))
         return calibrated_avg, avg_std
 
-    def calibration_sharpness(
-        self, test_x: np.ndarray, test_y: np.ndarray, min_conf_level: float = 0.5, num_conf_levels: int = 20
-    ) -> Tuple[float, float]:
+    def calibration_sharpness(self, test_x: np.ndarray, test_y: np.ndarray,
+                              min_conf_level: float = 0.5, num_conf_levels: int = 20) -> Tuple[float, float]:
         # compute whether uncertainty estimates are calibrated and sharp
         pred_mean, pred_std = self.predict(test_x, return_density=False)
-        return self._calibration_sharpness(
-            pred_mean, pred_std, test_y, min_conf_level=min_conf_level, num_conf_levels=num_conf_levels
-        )
+        return self._calibration_sharpness(pred_mean, pred_std, test_y, min_conf_level=min_conf_level,
+                                           num_conf_levels=num_conf_levels)
 
     def _compute_normalization_stats(self, X, Y):
         # save mean and variance of data for normalization
@@ -240,17 +223,16 @@ class RegressionModel:
         _torch_module_names = self._torch_module_variables
         for module_name in _torch_module_names:
             if isinstance(state_dict[module_name], torch.nn.Module):
-                state_dict[f"{module_name}_state"] = state_dict.pop(module_name).state_dict()
-        state_dict["_torch_module_names"] = _torch_module_names
-        state_dict["_rds_state"] = state_dict.pop("_rds").get_state()
+                state_dict[f'{module_name}_state'] = state_dict.pop(module_name).state_dict()
+        state_dict['_torch_module_names'] = _torch_module_names
+        state_dict['_rds_state'] = state_dict.pop('_rds').get_state()
         return state_dict
 
     def __setstate__(self, state):
-        self.__init__(**state["_init_args"])
-        self._rds.set_state(state.pop("_rds_state"))
-        torch_states = {
-            module_name: state.pop(f"{module_name}_state") for module_name in state.pop("_torch_module_names")
-        }
+        self.__init__(**state['_init_args'])
+        self._rds.set_state(state.pop('_rds_state'))
+        torch_states = {module_name: state.pop(f'{module_name}_state') for module_name in
+                        state.pop('_torch_module_names')}
         self.__dict__.update(state)
         if self.X_data.shape[0] > 0:
             self._reset_posterior()
@@ -259,42 +241,32 @@ class RegressionModel:
 
 
 class RegressionModelMetaLearned(RegressionModel):
+
     def meta_fit(self, meta_train_tuples, meta_valid_tuples=None, verbose=True, **kwargs):
         raise NotImplementedError
 
-    def meta_predict(
-        self, context_x: np.ndarray, context_y: np.ndarray, test_x: np.ndarray, return_density: bool = False
-    ):
+    def meta_predict(self, context_x: np.ndarray, context_y: np.ndarray, test_x: np.ndarray,
+                     return_density: bool = False):
         raise NotImplementedError
 
-    def meta_calibration_sharpness(
-        self,
-        context_x: np.ndarray,
-        context_y: np.ndarray,
-        test_x: np.ndarray,
-        test_y: np.ndarray,
-        min_conf_level: float = 0.5,
-        num_conf_levels: int = 20,
-    ) -> Tuple[float, float]:
+    def meta_calibration_sharpness(self, context_x: np.ndarray, context_y: np.ndarray, test_x: np.ndarray,
+                                   test_y: np.ndarray, min_conf_level: float = 0.5,
+                                   num_conf_levels: int = 20) -> Tuple[float, float]:
         pred_mean, pred_std = self.meta_predict(context_x, context_y, test_x, return_density=False)
-        return self._calibration_sharpness(
-            pred_mean, pred_std, test_y, min_conf_level=min_conf_level, num_conf_levels=num_conf_levels
-        )
+        return self._calibration_sharpness(pred_mean, pred_std, test_y, min_conf_level=min_conf_level,
+                                           num_conf_levels=num_conf_levels)
 
     def meta_calibration_sharpness_for_dataset(self, x: np.ndarray, y: np.ndarray, **kwargs) -> Tuple[float, float]:
-        result_list = [
-            self.meta_calibration_sharpness(x[:i], y[:i], x[i:], y[i:], **kwargs) for i in range(2, x.shape[0])
-        ]
+        result_list = [self.meta_calibration_sharpness(x[:i], y[:i], x[i:], y[i:], **kwargs)
+                       for i in range(2, x.shape[0])]
         calib_freq = float(np.mean(list(zip(*result_list))[0]))
         avg_std = float(np.mean(list(zip(*result_list))[1]))
         return calib_freq, avg_std
 
-    def meta_calibration_sharpness_for_datasets(
-        self, meta_data_tuples: List[Tuple[np.ndarray, np.ndarray]], **kwargs
-    ) -> Tuple[float, float]:
-        calibr_sharpness_results = [
-            self.meta_calibration_sharpness_for_dataset(x, y, **kwargs) for x, y in meta_data_tuples
-        ]
+    def meta_calibration_sharpness_for_datasets(self, meta_data_tuples: List[Tuple[np.ndarray, np.ndarray]],
+                                                **kwargs) -> Tuple[float, float]:
+        calibr_sharpness_results = [self.meta_calibration_sharpness_for_dataset(x, y, **kwargs)
+                                    for x,y in meta_data_tuples]
         calib_freq = float(np.mean(list(zip(*calibr_sharpness_results))[0]))
         avg_std = float(np.mean(list(zip(*calibr_sharpness_results))[1]))
         return calib_freq, avg_std
@@ -311,15 +283,13 @@ class RegressionModelMetaLearned(RegressionModel):
 
         """
 
-        assert all([len(valid_tuple) == 4 for valid_tuple in test_tuples])
+        assert (all([len(valid_tuple) == 4 for valid_tuple in test_tuples]))
 
-        ll_list, rmse_list, calibr_err_list, calibr_err_chi2_list = list(
-            zip(*[self.meta_eval(*test_data_tuple, **kwargs) for test_data_tuple in test_tuples])
-        )
+        ll_list, rmse_list, calibr_err_list, calibr_err_chi2_list= list(zip(*[self.meta_eval(*test_data_tuple, **kwargs) for test_data_tuple in test_tuples]))
 
         return np.mean(ll_list), np.mean(rmse_list), np.mean(calibr_err_list), np.mean(calibr_err_chi2_list)
 
-    def meta_eval(self, context_x: np.ndarray, context_y: np.ndarray, test_x: np.ndarray, test_y: np.ndarray):
+    def meta_eval(self,  context_x: np.ndarray, context_y: np.ndarray, test_x: np.ndarray, test_y: np.ndarray):
         test_x, test_y = _handle_input_dimensionality(test_x, test_y)
         test_y_tensor = torch.from_numpy(test_y).contiguous().float().flatten()
 
@@ -335,9 +305,7 @@ class RegressionModelMetaLearned(RegressionModel):
             return avg_log_likelihood.cpu().item(), rmse.cpu().item(), calibr_error.cpu().item(), calibr_error_chi2
 
     def _compute_meta_normalization_stats(self, meta_train_tuples: List[Tuple[np.ndarray, np.ndarray]]):
-        X_stack, Y_stack = list(
-            zip(*[_handle_input_dimensionality(x_train, y_train) for x_train, y_train in meta_train_tuples])
-        )
+        X_stack, Y_stack = list(zip(*[_handle_input_dimensionality(x_train, y_train) for x_train, y_train in meta_train_tuples]))
         X, Y = np.concatenate(X_stack, axis=0), np.concatenate(Y_stack, axis=0)
 
         if self.normalize_data:
@@ -353,12 +321,7 @@ class RegressionModelMetaLearned(RegressionModel):
         self.input_dim = meta_train_data[0][0].shape[-1]
         self.output_dim = meta_train_data[0][1].shape[-1]
 
-        assert all(
-            [
-                self.input_dim == train_x.shape[-1] and self.output_dim == train_t.shape[-1]
-                for train_x, train_t in meta_train_data
-            ]
-        )
+        assert all([self.input_dim == train_x.shape[-1] and self.output_dim == train_t.shape[-1] for train_x, train_t in meta_train_data])
 
     def _prepare_data_per_task(self, x_data: np.ndarray, y_data: np.ndarray, flatten_y: bool = True):
         # a) make arrays 2-dimensional
@@ -378,20 +341,12 @@ class RegressionModelMetaLearned(RegressionModel):
         return x_tensor, y_tensor
 
     @classmethod
-    def select_hparam_via_bracket_cv(
-        cls,
-        default_kwargs: Dict,
-        meta_train_data: List[Tuple[np.ndarray, np.ndarray]],
-        target_param: str,
-        min_calib_freq: float = 0.99,
-        logspace: bool = True,
-        upper: float = 1.0,
-        lower: float = 1e-3,
-        num_iters: int = 6,
-        verbose: bool = True,
-        increase_when_uncalibrated: bool = True,
-    ) -> RegressionModel:
-        assert 0.0 < min_calib_freq <= 1.0
+    def select_hparam_via_bracket_cv(cls, default_kwargs: Dict, meta_train_data: List[Tuple[np.ndarray, np.ndarray]],
+                                     target_param: str, min_calib_freq: float = 0.99,
+                                     logspace: bool = True, upper: float = 1.0, lower: float = 1e-3,
+                                     num_iters: int = 6, verbose: bool = True,
+                                     increase_when_uncalibrated: bool = True) -> RegressionModel:
+        assert 0. < min_calib_freq <= 1.
 
         def calib_sharpness(gp_kwargs, meta_train_data, x_data_test, y_data_test):
             torch.set_num_threads(2)
@@ -400,7 +355,7 @@ class RegressionModelMetaLearned(RegressionModel):
             return model.meta_calibration_sharpness_for_dataset(x_data_test, y_data_test)
 
         transform_fn = np.log10 if logspace else lambda x: x
-        inv_transform_fn = lambda x: 10**x if logspace else lambda x: x
+        inv_transform_fn = lambda x: 10 ** x if logspace else lambda x: x
         lower = transform_fn(lower)
         upper = transform_fn(upper)
 
@@ -411,18 +366,18 @@ class RegressionModelMetaLearned(RegressionModel):
             gp_kwargs[target_param] = param
             # do leave-one-out cross-validation on the meta-training tasks
             calibr_sharpness_results = [
-                calib_sharpness(gp_kwargs, meta_train_data[:i] + meta_train_data[i + 1 :], *meta_train_data[i])
-                for i in range(len(meta_train_data))
-            ]
+                calib_sharpness(
+                    gp_kwargs,
+                    meta_train_data[:i] + meta_train_data[i + 1:],
+                    *meta_train_data[i]
+                ) for i in range(len(meta_train_data))]
             calib_freq = np.mean(list(zip(*calibr_sharpness_results))[0])
             avg_std = np.mean(list(zip(*calibr_sharpness_results))[1])
             if verbose:
-                print(
-                    f"iter {i}/{num_iters} | upper: {10**upper} | lower = {10**lower} "
-                    f"| {target_param}: {param} | calib_freq = {calib_freq} | avg_std = {avg_std}"
-                )
+                print(f'iter {i}/{num_iters} | upper: {10 ** upper} | lower = {10 ** lower} '
+                      f'| {target_param}: {param} | calib_freq = {calib_freq} | avg_std = {avg_std}')
 
-            if (calib_freq >= min_calib_freq) ^ increase_when_uncalibrated:
+            if (calib_freq >= min_calib_freq)^increase_when_uncalibrated:
                 lower = middle
             else:
                 upper = middle
@@ -431,13 +386,13 @@ class RegressionModelMetaLearned(RegressionModel):
         gp_kwargs = copy.deepcopy(default_kwargs)
         gp_kwargs[target_param] = final_param
         if verbose:
-            print(f"Final parameter {target_param} chosen: {final_param}")
+            print(f'Final parameter {target_param} chosen: {final_param}')
         return cls(**gp_kwargs)
 
 
 def _calib_error(pred_dist_vectorized, test_t_tensor):
     cdf_vals = pred_dist_vectorized.cdf(test_t_tensor)
-
+    
     if test_t_tensor.shape[0] == 1:
         test_t_tensor = test_t_tensor.flatten()
         cdf_vals = cdf_vals.flatten()
@@ -446,15 +401,13 @@ def _calib_error(pred_dist_vectorized, test_t_tensor):
     conf_levels = torch.linspace(0.05, 1.0, 20)
     emp_freq_per_conf_level = torch.sum(cdf_vals[:, None] <= conf_levels, dim=0).float() / num_points
 
-    calib_rmse = torch.sqrt(torch.mean((emp_freq_per_conf_level - conf_levels) ** 2))
+    calib_rmse = torch.sqrt(torch.mean((emp_freq_per_conf_level - conf_levels)**2))
     return calib_rmse
-
 
 def _calib_error_chi2(pred_dist_vectorized, test_t_tensor):
     import scipy.stats
-
     z2 = (((pred_dist_vectorized.mean - test_t_tensor) / pred_dist_vectorized.stddev) ** 2).detach().numpy()
     f = lambda p: np.mean(z2 < scipy.stats.chi2.ppf(p, 1))
     conf_levels = np.linspace(0.05, 1, 20)
     accs = np.array([f(p) for p in conf_levels])
-    return np.sqrt(np.mean((accs - conf_levels) ** 2))
+    return np.sqrt(np.mean((accs - conf_levels)**2))

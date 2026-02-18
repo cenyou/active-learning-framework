@@ -16,11 +16,10 @@ import gpflow
 from typing import Tuple
 import numpy as np
 
-from tensorflow_probability import distributions as tfd
-from alef.kernels.base_elementary_kernel import BaseElementaryKernel
-
 gpflow.config.set_default_float(np.float64)
 f64 = gpflow.utilities.to_default_float
+from tensorflow_probability import distributions as tfd
+from alef.kernels.base_elementary_kernel import BaseElementaryKernel
 
 
 class LinearKernel(BaseElementaryKernel):
@@ -35,10 +34,14 @@ class LinearKernel(BaseElementaryKernel):
         active_on_single_dimension: bool,
         active_dimension: int,
         name: str,
-        **kwargs,
+        **kwargs
     ):
-        super().__init__(input_dimension, active_on_single_dimension, active_dimension, name)
-        self.kernel = gpflow.kernels.Polynomial(degree=1, variance=f64([base_variance]), offset=f64([base_offset]))
+        super().__init__(
+            input_dimension, active_on_single_dimension, active_dimension, name
+        )
+        self.kernel = gpflow.kernels.Polynomial(
+            degree=1, variance=f64([base_variance]), offset=f64([base_offset])
+        )
         # self.kernel = gpflow.kernels.Linear(variance=f64([base_variance]))
         if add_prior:
             a_variance, b_variance = variance_prior_parameters

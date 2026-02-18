@@ -13,11 +13,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
-from typing import Tuple
-from abc import ABC, abstractmethod
+from typing import Tuple, Optional
+from abc import ABC,abstractmethod
+
 
 
 class BaseDataset(ABC):
+
     @abstractmethod
     def load_data_set(self):
         """
@@ -25,8 +27,9 @@ class BaseDataset(ABC):
         """
         raise NotImplementedError
 
+
     @abstractmethod
-    def get_complete_dataset(self, **kwargs) -> Tuple[np.array, np.array]:
+    def get_complete_dataset(self,**kwargs) -> Tuple[np.array,np.array]:
         """
         Retrieves the complete dataset (of size n with input dimensions d and output dimensions m) as numpy arrays
 
@@ -37,7 +40,7 @@ class BaseDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def sample(self, n: int, **kwargs) -> Tuple[np.array, np.array]:
+    def sample(self,n : int,**kwargs) -> Tuple[np.array,np.array]:
         """
         retrieves sample of size n from dataset (without replacement)
 
@@ -48,7 +51,7 @@ class BaseDataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def sample_train_test(self, use_absolute: bool, n_train: int, n_test: int, fraction_train: float):
+    def sample_train_test(self,use_absolute : bool, n_train : int, n_test : int, fraction_train : float):
         """
         retrieves train and test data (mutually exclusive samples) either in absoulte numbers or as fraction from the complete dataset
 
@@ -74,23 +77,31 @@ class BaseDataset(ABC):
         raise NotImplementedError
 
 
+
 class StandardDataSet(BaseDataset):
+    
     def __init__(self):
-        self.x: np.array
-        self.y: np.array
-        self.length: int
-        self.name: str
+        self.x : np.array
+        self.y : np.array
+        self.length : int
+        self.name : str
 
     def get_complete_dataset(self):
-        return self.x, self.y
+        return self.x,self.y
 
-    def sample(self, n):
-        indexes = np.random.choice(self.length, n, replace=False)
+    def sample(self,n):
+        indexes = np.random.choice(self.length,n,replace=False)
         x_sample = self.x[indexes]
         y_sample = self.y[indexes]
-        return x_sample, y_sample
+        return x_sample,y_sample
 
-    def sample_train_test(self, use_absolute: bool, n_train: int, n_test: int, fraction_train: float):
+    def sample_train_test(
+        self,
+        use_absolute: bool,
+        n_train: int,
+        n_test: int,
+        fraction_train: float
+    ):
         r"""
         @ Mathias
         I propose to modify this method.
@@ -108,44 +119,45 @@ class StandardDataSet(BaseDataset):
             n_test: int=None,
             fraction_train: float=0
         )
-
+        
         2. write 2 different methods, one takes n_train & n_test while the other takes fraction_train.
             could even write another hidden method called by these 2 methods,
             which does line 126-134, to reduce some redundancy.
 
         """
         if use_absolute:
-            assert n_train < self.length
+            assert n_train<self.length
             n = n_train + n_test
-            if n > self.length:
+            if n> self.length:
                 n = self.length
                 print("Test + Train set exceeds number of datapoints - use n-n_train test points")
         else:
             n = self.length
-            n_train = int(fraction_train * n)
+            n_train = int(fraction_train*n)
             n_test = n - n_train
-        indexes = np.random.choice(self.length, n, replace=False)
+        indexes = np.random.choice(self.length,n,replace=False)
         train_indexes = indexes[:n_train]
-        assert len(train_indexes) == n_train
+        assert len(train_indexes)==n_train
         test_indexes = indexes[n_train:]
-        if use_absolute and n_train + n_test <= self.length:
+        if use_absolute and n_train+n_test <= self.length:
             assert len(test_indexes) == n_test
-        x_train = self.x[train_indexes]
+        x_train=self.x[train_indexes]
         y_train = self.y[train_indexes]
         x_test = self.x[test_indexes]
         y_test = self.y[test_indexes]
-        return x_train, y_train, x_test, y_test
+        return x_train,y_train,x_test,y_test
 
     def get_name(self):
         return self.name
 
 
 class DatasetWrapper(StandardDataSet):
-    def __init__(self, x_data, y_data, name):
+
+    def __init__(self,x_data,y_data,name):
         super().__init__()
-        self.x = x_data
+        self.x=x_data
         self.y = y_data
-        self.length = len(self.x)
+        self.length=len(self.x)
         self.name = name
 
     def load_data_set(self):

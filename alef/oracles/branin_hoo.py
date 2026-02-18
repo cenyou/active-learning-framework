@@ -20,9 +20,13 @@ from alef.oracles.base_oracle import Standard2DOracle
 class BraninHoo(Standard2DOracle):
     def __init__(
         self,
-        observation_noise: float = 0.1,
-        constants: np.ndarray = np.array([1, 5.1 / 4 / (math.pi**2), 5 / math.pi, 6, 10, 1 / 8 / math.pi]),
+        observation_noise: float=0.1,
+        constants: np.ndarray = np.array([1, 5.1 / 4 / (math.pi**2), 5 / math.pi, 6, 10, 1 / 8 / math.pi])
     ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param constants: the constants of the Branin-Hoo function
+        """
         self._constants = np.squeeze(constants)
         assert self._constants.shape == (6,)
         super().__init__(observation_noise, 0.0, 1.0)
@@ -52,7 +56,7 @@ class BraninHoo(Standard2DOracle):
     def f(self, x1, x2):
         a, b, c, r, s, t = self._constants
         x1, x2 = self.x_scale(np.array([x1, x2]))
-        f = a * (x2 - b * (x1**2) + c * x1 - r) ** 2 + s * (1 - t) * np.cos(x1) + s
+        f =  (a * (x2 - b * (x1**2) + c * x1 - r) ** 2 + s * (1 - t) * np.cos(x1) + s)
         return f
 
     def query(self, x, noisy=True):

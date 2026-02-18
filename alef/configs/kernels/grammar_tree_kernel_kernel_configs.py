@@ -46,11 +46,7 @@ class TreeBasedOTGrammarKernelConfig(OptimalTransportGrammarKernelConfig):
 
 
 class OTWeightedDimsExtendedGrammarKernelConfig(OptimalTransportGrammarKernelConfig):
-    feature_type_list: List[FeatureType] = [
-        FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT,
-        FeatureType.REDUCED_ELEMENTARY_PATHS,
-        FeatureType.SUBTREES,
-    ]
+    feature_type_list: List[FeatureType] = [FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT, FeatureType.REDUCED_ELEMENTARY_PATHS, FeatureType.SUBTREES]
     name = "OTWeightedDimsExtendedGrammarKernel"
 
 
@@ -60,10 +56,6 @@ class OTWeightedDimsExtendedKernelWithHyperpriorConfig(OTWeightedDimsExtendedGra
 
 
 class OTWeightedDimsInvarianceGrammarKernelConfig(OptimalTransportGrammarKernelConfig):
-    feature_type_list: List[FeatureType] = [
-        FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT,
-        FeatureType.REDUCED_ELEMENTARY_PATHS,
-        FeatureType.ADD_MULT_INVARIANT_SUBTREES,
-    ]
+    feature_type_list: List[FeatureType] = [FeatureType.DIM_WISE_WEIGHTED_ELEMENTARY_COUNT, FeatureType.REDUCED_ELEMENTARY_PATHS, FeatureType.ADD_MULT_INVARIANT_SUBTREES]
     transform_to_normal: bool = True
     name = "OTWeightedDimsInvarianceGrammarKernel"

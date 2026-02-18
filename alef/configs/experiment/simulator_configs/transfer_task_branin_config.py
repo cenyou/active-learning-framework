@@ -12,41 +12,36 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import List, Union, Sequence
 from alef.configs.experiment.simulator_configs.base_simulator_config import BaseSimulatorConfig
 from alef.enums.simulator_enums import InitialDataGenerationMethod
-
 
 class TransferTaskBraninBaseConfig(BaseSimulatorConfig):
     n_pool: int
     data_path: str
-    additional_safety: bool = False
-    oracle_type: str = "branin"
+    additional_safety: bool=False
+    oracle_type: str="branin"
     initial_data_source: InitialDataGenerationMethod = InitialDataGenerationMethod.FILE
-    observation_noise: float = 0.01
-    seed: int = 1234
-    name: str = "transfer_task_branin"
-
+    observation_noise: float=0.01
+    seed: int=1234
+    name: str='transfer_task_branin'
 
 class TransferTaskBranin0Config(TransferTaskBraninBaseConfig):
-    oracle_type: str = "branin0"
-    name: str = "transfer_task_branin0"
-
+    oracle_type: str="branin0"
+    name: str='transfer_task_branin0'
 
 class TransferTaskBranin1Config(TransferTaskBraninBaseConfig):
-    oracle_type: str = "branin1"
-    name: str = "transfer_task_branin1"
-
+    oracle_type: str="branin1"
+    name: str='transfer_task_branin1'
 
 class TransferTaskBranin2Config(TransferTaskBraninBaseConfig):
-    oracle_type: str = "branin2"
-    name: str = "transfer_task_branin2"
-
+    oracle_type: str="branin2"
+    name: str='transfer_task_branin2'
 
 class TransferTaskBranin3Config(TransferTaskBraninBaseConfig):
-    oracle_type: str = "branin3"
-    name: str = "transfer_task_branin3"
-
+    oracle_type: str="branin3"
+    name: str='transfer_task_branin3'
 
 class TransferTaskBranin4Config(TransferTaskBraninBaseConfig):
-    oracle_type: str = "branin4"
-    name: str = "transfer_task_branin4"
+    oracle_type: str="branin4"
+    name: str='transfer_task_branin4'

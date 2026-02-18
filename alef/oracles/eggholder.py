@@ -17,7 +17,15 @@ from alef.oracles.base_oracle import Standard2DOracle
 
 
 class Eggholder(Standard2DOracle):
-    def __init__(self, observation_noise: float, constants: np.ndarray = np.array([1.0, 1.0, 47.0])):
+    def __init__(
+        self,
+        observation_noise: float,
+        constants: np.ndarray = np.array([1.0, 1.0, 47.0])
+    ):
+        """
+        :param observation_noise: standard deviation of the observation noise (Gaussian noise)
+        :param constants: the constants of the Eggholder function
+        """
         self._constants = np.squeeze(constants)
         assert self._constants.shape == (3,)
         super().__init__(observation_noise, 0.0, 1.0)
@@ -43,7 +51,8 @@ class Eggholder(Standard2DOracle):
         a, b, c = self._constants
         x1 = self.x_scale(x1)
         x2 = self.x_scale(x2)
-        f_raw = -(x2 + c) * np.sin(np.sqrt(abs(a * x2 + x1 / 2 + 47))) - b * x1 * np.sin(np.sqrt(abs(x1 - x2 - 47)))
+        f_raw = -(x2 + c) * np.sin(np.sqrt(abs(a * x2 + x1 / 2 + 47))) - \
+            b * x1 * np.sin(np.sqrt(abs(x1 - x2 - 47)))
         return f_raw
 
     def query(self, x, noisy=True):
@@ -56,7 +65,6 @@ class Eggholder(Standard2DOracle):
     def get_function_expression(self):
         a, b, c = self._constants
         print(f"-(x2 + {c}) sin(sqrt(|{a}x2 + x1/2 + 47|)) - {b}x1 sin(sqrt(|x1-x2-47|))")
-
 
 if __name__ == "__main__":
     oracle = Eggholder(0.01)

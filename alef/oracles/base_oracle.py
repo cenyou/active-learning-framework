@@ -14,24 +14,28 @@
 
 import numpy as np
 import os
+import abc
+from copy import deepcopy
 from typing import Tuple, Union, Sequence
 from matplotlib import pyplot as plt
-from alef.utils.utils import create_grid, check1Dlist
-from alef.oracles.context_interface import ContextSupport
-
+from alef.utils.utils import create_grid, create_grid_multi_bounds, check1Dlist
+from alef.oracles.helpers.context_interface import ContextSupport
 
 class BaseOracle:
-    def query(self, x: np.array) -> float:
+    @abc.abstractmethod
+    def query(self, x: np.array, noisy: bool) -> float:
         """
         Queries the oracle at location x and gets back the oracle value
 
         Arguments:
             x : np.array - np.arry with dimension (d,) where d is the input dimension
+            noisy : bool - flag if noise should be added
         Returns:
             float - value of oracle at location x
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_random_data(self, n: int, noisy: bool) -> Tuple[np.ndarray, np.ndarray]:
         """
         Generates random n uniform random queries inside the box bounds of the oracle and return the queries and oracle values
@@ -45,6 +49,7 @@ class BaseOracle:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_random_data_in_box(
         self, n: int, a: Union[float, Sequence[float]], box_width: Union[float, Sequence[float]], noisy: bool = True
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -62,6 +67,7 @@ class BaseOracle:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_box_bounds(self):
         """
         Returns box bounds a,b of the oracle (right now every dimension has the same bounds)
@@ -72,6 +78,7 @@ class BaseOracle:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_dimension(self):
         """
         Returns input dimension of oracle
@@ -99,12 +106,33 @@ class StandardOracle(BaseOracle, ContextSupport):
         X, Y = self.get_random_data(n, noisy=False)
         return max(Y)
 
+    def batch_query(self, X: np.ndarray, noisy: bool=True) -> np.ndarray:
+        """
+        Queries the oracle at location x and gets back the oracle value
+
+        Arguments:
+            X : np.array - np.arry with dimension (n,d) where n is the number of queries and d is the input dimension
+            noisy : bool - flag if noise should be added
+        Returns:
+            np.array - [n, ] array - values of oracle at location X
+        """
+        return np.array([self.query(X[..., i,:], noisy) for i in range(X.shape[-2])])
+
     def get_grid_data(self, n_per_dim: int, noisy: bool = True):
+        r"""
+        Generates random n_per_dim^D equidistant data inside the box bounds of the oracle and return
+        D is the dimension of input space
+
+        Arguments:
+            n_per_dim : int - number of grids per dimension
+            noisy : bool - flag if noise should be added - should raise Error if noisy=False is not possible if e.g. real world oracle without ground truth
+        Returns:
+            np.array - input/queries with dimension (n,d) where n is n_per_dim^d, d is the input dimension
+            np.array - oracle values at input dimension = (n,1)
+        """
         X = create_grid(self.__a, self.__b, n_per_dim, self.get_variable_dimension())
         X = self._decorate_variable_with_context(X)
-
-        function_values = [np.reshape(self.query(x, noisy), [1, -1]) for x in X]
-        return X, np.concatenate(function_values, axis=0)
+        return X, self.batch_query(X, noisy).reshape(-1, 1)
 
     def get_random_data(self, n: int, noisy: bool = True):
         r"""
@@ -119,11 +147,14 @@ class StandardOracle(BaseOracle, ContextSupport):
         """
         X = np.random.uniform(low=self.__a, high=self.__b, size=(n, self.get_variable_dimension()))
         X = self._decorate_variable_with_context(X)
-        function_values = [np.reshape(self.query(x, noisy), [1, -1]) for x in X]
-        return X, np.concatenate(function_values, axis=0)
+        return X, self.batch_query(X, noisy).reshape(-1, 1)
 
     def get_random_data_in_box(
-        self, n: int, a: Union[float, Sequence[float]], box_width: Union[float, Sequence[float]], noisy: bool = True
+        self,
+        n: int,
+        a: Union[float, Sequence[float]],
+        box_width: Union[float, Sequence[float]],
+        noisy: bool = True
     ):
         r"""
         Generates random n uniform random queries inside the specified box bounds and return the queries and oracle values
@@ -154,9 +185,7 @@ class StandardOracle(BaseOracle, ContextSupport):
         bb[bb > self.__b] = self.__b
 
         X = np.random.uniform(low=aa, high=bb, size=(n, self.get_dimension()))
-
-        function_values = [np.reshape(self.query(x, noisy), [1, -1]) for x in X]
-        return X, np.concatenate(function_values, axis=0)
+        return X, self.batch_query(X, noisy).reshape(-1, 1)
 
     def get_box_bounds(self):
         """
@@ -194,11 +223,11 @@ class Standard1DOracle(StandardOracle):
         super().__init__(observation_noise, a, b, 1)
 
     def plot(self):
-        self._plot()
+        fig = self._plot()
         plt.show()
 
     def save_plot(self, file_name: str = None, file_path: str = None):
-        self._plot()
+        fig = self._plot()
 
         plt.tight_layout()
         plt.savefig(os.path.join(file_path, file_name))
@@ -218,28 +247,24 @@ class Standard2DOracle(StandardOracle):
         super().__init__(observation_noise, a, b, 2)
 
     def plot(self):
-        self._plot_3D()
+        fig = self._plot_3D()
         plt.show()
 
     def save_plot(self, file_name: str = None, file_path: str = None):
-        self._plot_3D()
+        fig = self._plot_3D()
 
         plt.tight_layout()
         plt.savefig(os.path.join(file_path, file_name))
         plt.close()
 
     def plot_color_map(self, safe_lower_bound: float = 1 / 6, safe_upper_bound: float = np.inf):
-        self._plot_color_map(safe_lower_bound, safe_upper_bound)
+        fig = self._plot_color_map(safe_lower_bound, safe_upper_bound)
         plt.show()
 
     def save_color_map(
-        self,
-        safe_lower_bound: float = 1 / 6,
-        safe_upper_bound: float = np.inf,
-        file_name: str = None,
-        file_path: str = None,
+        self, safe_lower_bound: float = 1 / 6, safe_upper_bound: float = np.inf, file_name: str = None, file_path: str = None
     ):
-        self._plot_color_map(safe_lower_bound, safe_upper_bound)
+        fig = self._plot_color_map(safe_lower_bound, safe_upper_bound)
 
         plt.tight_layout()
         plt.savefig(os.path.join(file_path, file_name))
@@ -259,15 +284,14 @@ class Standard2DOracle(StandardOracle):
 
         fig = plt.figure(figsize=(16, 8))
         ax = fig.add_subplot(1, 2, 1)
-        contour = ax.tricontourf(xs[:, 0], xs[:, 1], ys[:, 0], levels=np.linspace(-2, 2, 50), cmap="seismic")
+        contour = ax.tricontourf(
+            xs[:, 0], xs[:, 1], ys[:, 0],
+            levels=np.linspace(-2, 2, 50), cmap='seismic'
+        )
         fig.colorbar(contour, ax=ax)
         ax = fig.add_subplot(1, 2, 2)
         contour = ax.tricontourf(
-            xs[:, 0],
-            xs[:, 1],
-            (ys[:, 0] >= safe_lower_bound) * (ys[:, 0] <= safe_upper_bound),
-            levels=[-0.5, 0.5, 1.5],
-            cmap="YlGn",
+            xs[:, 0], xs[:, 1], (ys[:, 0] >= safe_lower_bound) * (ys[:, 0] <= safe_upper_bound), levels=[-0.5, 0.5, 1.5], cmap="YlGn"
         )
         fig.colorbar(contour, ax=ax)
 

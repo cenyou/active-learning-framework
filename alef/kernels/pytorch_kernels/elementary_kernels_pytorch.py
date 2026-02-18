@@ -17,52 +17,18 @@ from typing import Tuple, Union, Sequence
 import gpytorch
 import torch
 import math
+from pyro import distributions as dist
 from gpytorch.constraints import Positive
+from .bayes_linear_model import BayesianLinearModel
+from alef.configs.base_parameters import INPUT_DOMAIN, CENTRAL_DOMAIN, NUMERICAL_POSITIVE_LOWER_BOUND, NUMERICAL_POSITIVE_LOWER_BOUND_IN_LOG
 from alef.kernels.pytorch_kernels.customized_gpytorch_kernels import PeriodicKernel
-
-
-"""
-ref:
-Rahimi & Recht, NeurIPS 2007, Random Features for Large-Scale Kernel Machines
-Wilson et al., ICML 2020, Efficiently Sampling Functions from Gaussian Process Posteriors
-"""
-
-
-class BayesianLinearModel(torch.nn.Module):
-    def __init__(self, omega, bias, weight, x_expanded_already):
-        super().__init__()
-        self.register_buffer("omega", omega.clone())  # [num_kernels, num_functions, input_dim, L]
-        self.register_buffer("bias", bias.clone())  # [num_kernels, num_functions, L]
-        self.register_buffer("weight", weight.clone())  # [num_kernels, num_functions, L]
-        self.x_expanded_already = x_expanded_already
-
-    def forward(self, x: torch.Tensor):
-        if self.x_expanded_already:
-            # x: [B, num_kernels, num_functions, ..., input_dim] or [B, 1, 1, ..., input_dim]
-            # num_kernels: batch size of kernel hyperparameters
-            msg = f"shape of x[1:3] {x.shape[1:3]} does not match [num of kernel, num of funcs per kernel] [{self.omega.shape[0]}, {self.weight.shape[1]}]"
-            assert x.shape[1] == 1 or x.shape[1] == self.omega.shape[0], msg
-            assert x.shape[2] == 1 or x.shape[2] == self.weight.shape[1], msg
-            xx = torch.einsum("bkf...->kfb...", x)  # turn to [num_kernels, num_functions, B, ..., input_dim]
-            xx = xx.expand(self.omega.shape[:2] + xx.shape[2:]) if xx.flatten(0, 1).shape[0] == 1 else xx
-        else:
-            # x: [B, ..., input_dim]
-            xx = x.expand(self.omega.shape[:2] + x.shape)  # turn to [num_kernels, num_functions, B, ..., input_dim]
-        linear_opt_x = torch.einsum(
-            "mnbd,mndl->mnbl", xx.flatten(start_dim=2, end_dim=-2), self.omega
-        ) + self.bias.unsqueeze(-2)  # [num_kernels, num_functions, xx.shape[2:-1]_flatten, L]
-        phi = math.sqrt(2.0 / self.weight.shape[1]) * torch.cos(
-            linear_opt_x
-        )  # [num_kernels, num_functions, xx.shape[2:-1]_flatten, L]
-        f_out = torch.einsum("mnbl,mnl->mnb", phi, self.weight).reshape(
-            xx.shape[:-1]
-        )  # [num_kernels, num_functions, xx.shape[2:-1]]
-        return torch.einsum("kfb...->bkf...", f_out)  # [B, num_kernels, num_functions, x.shape[3:-1]]
+from alef.utils.torch_sample_executors import torch_sample, pyro_sample
 
 
 class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
+    
     has_fourier_feature = False
-
+    
     def __init__(
         self,
         input_dimension: int,
@@ -85,8 +51,29 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
             self.num_active_dimensions = input_dimension
         self.kernel = None
 
-    def forward(self, x1, x2, diag=False, last_dim_is_batch=False, **params):
-        return self.kernel.forward(x1, x2, diag=diag, last_dim_is_batch=last_dim_is_batch, **params)
+    def forward(self, x1, x2, diag=False, last_dim_is_batch=False, *, mask=None, **params):
+        """
+        :param x1: torch.Tensor of size [*batch_shape, N, D]
+        :param x2: None or torch.Tensor of size [*batch_shape, M, D]
+        :param diag: bool, compute the whole kernel or just the diag. If True, ensure x1 == x2 or x2 = None.
+        :param last_dim_is_batch: bool. If True, treat the last dimension of `x1` and `x2` as another batch dimension.
+        :param mask: None or torch.Tensor of size [*batch_shape, D], allow one to compute different dimension at different batch instance
+        :return: The kernel matrix or vector. The shape depends on the kernel's evaluation mode:
+
+            * `full_covar`: `... x N x M`
+            * `full_covar` with `last_dim_is_batch=True`: `... x D x N x M`
+            * `diag`: `... x N`
+            * `diag` with `last_dim_is_batch=True`: `... x D x N`
+        """
+        if not mask is None:
+            assert not last_dim_is_batch or (mask.shape[-1]==1 and torch.all(mask==1)), "no dimension to be masked (last_dim_is_batch take only one dim)"
+            # note: replacing by 0 works for stationary kernels
+            # however this is not a valid masking for general kernels
+            x1_ = x1.masked_fill(mask.unsqueeze(-2)==0, 0)
+            x2_ = None if x2 is None else x2.masked_fill(mask.unsqueeze(-2)==0, 0)
+        else:
+            x1_, x2_ = x1, x2
+        return self.kernel.forward(x1_, x2_, diag=diag, last_dim_is_batch=last_dim_is_batch, **params)
 
     def get_input_dimension(self):
         return self.input_dimension
@@ -96,21 +83,29 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
         raise NotImplementedError
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
         D = self.get_input_dimension()
         dumpy_point = torch.ones([1, D], device=self.kernel.device)
 
-        var_scale = self(dumpy_point, diag=True).evaluate().squeeze(-1)  # size is kernel batch size
+        var_scale = self(dumpy_point, diag=True).to_dense().squeeze(-1) # size is kernel batch size
         std_scale = torch.sqrt(var_scale)
         return std_scale
+
+    @prior_scale.setter
+    def prior_scale(self, value):
+        raise NotImplementedError
 
     ### the followings are for fourier features
     ### the followings are for fourier features
     ### the followings are for fourier features
-    def _sample_feature_frequencies(self, L: int, num_functions: int = 1):
+    def _sample_feature_frequencies(self, L: int, num_functions: int=1, sample_executor=torch_sample, sample_name='rff_omega'):
         r"""
         :param L: int, number of fourier features, see [1] page 3, this is the D in the paper
         :param num_functions: int, number of functions to sample (for batch purpose)
+        :param sample_executor: callable, a function to sample (see below)
+        :param sample_name: str, name of the sample, (see below)
+
+        we would define a distribution, and then sample by sample_executor(sample_name, distribution)
 
         return:
         torch.Tensor of shape [..., num_functions, input_dim, L], see [1] page 3, this is the omega in the paper
@@ -122,15 +117,19 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
         else:
             pass
 
-    def _sample_feature_weights(self, L: int, num_functions: int = 1):
+    def _sample_feature_weights(self, L: int, num_functions: int=1, sample_executor=torch_sample, sample_name='BLM.weight'):
         r"""
         :param L: int, number of fourier features, see [1] page 3, this is the D in the paper
         :param num_functions: int, number of functions to sample (for batch purpose)
+        :param sample_executor: callable, a function to sample (see below)
+        :param sample_name: str, name of the sample, (see below)
+
+        we would define a distribution, and then sample by sample_executor(sample_name, distribution)
 
         return:
 
         torch.Tensor of shape [..., num_functions, L], see [1] page 3 and [2] page 3, this is the w in paper [2]
-
+        
         notice that, if we sample w as in paper [2], then cov(f(x), f(x')) = 1 * <phi(x), phi(x') >
 
         [1] Rahimi & Recht, NeurIPS 2007, Random Features for Large-Scale Kernel Machines
@@ -141,10 +140,15 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
         else:
             pass
 
-    def sample_fourier_features(self, L: int, num_functions: int = 1):
+    def sample_fourier_features(self, L: int, num_functions: int=1, sample_executor=torch_sample, sample_name='BLM'):
         r"""
         :param L: int, number of fourier features, see [1] page 3, this is the D in the paper
         :param num_functions: int, number of functions to sample (for batch purpose)
+        :param sample_executor: callable, a function to sample (see below)
+        :param sample_name: str, name of the sample, (see below)
+
+        we would define distributions of Bayesian linear model's parameters,
+        and then sample each parameter by sample_executor(sample_name, distribution)
 
         sample random fourier features
         see [2], page 3 for details
@@ -156,25 +160,40 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
             raise NotImplementedError
         else:
             self._num_functions = num_functions
-            self._num_fourier_sample = L
+            self._num_fourier_samples = L
 
             self._omega = self._sample_feature_frequencies(
-                self._num_fourier_sample, num_functions
-            )  # [..., num_functions, input_dim, L]
-            self._bias = (
-                2
-                * math.pi
-                * torch.rand(size=self._omega.shape[:-2] + (self._num_fourier_sample,)).to(self._omega.device)
-            )  # [..., num_functions, L]
+                self._num_fourier_samples,
+                num_functions,
+                sample_executor = sample_executor,
+                sample_name = sample_name + '.omega'
+            ) # [..., num_functions, input_dim, L]
+            bias_size = self._omega.shape[:-2] + (self._num_fourier_samples, )
+            bias_dist = dist.Uniform(
+                torch.zeros(bias_size).to(self._omega.device),
+                2 * math.pi * torch.ones(bias_size).to(self._omega.device)
+            )
+            self._bias = sample_executor(sample_name + '.bias', bias_dist) # [..., num_functions, L]
+            #self._bias = 2 * math.pi * torch.rand(size=bias_size).to(self._omega.device) # [..., num_functions, L]
             self._weight = self._sample_feature_weights(
-                self._num_fourier_sample, num_functions
-            )  # [..., num_functions, L]
+                self._num_fourier_samples,
+                num_functions,
+                sample_executor = sample_executor,
+                sample_name = sample_name + '.weight'
+            ) # [..., num_functions, L]
 
-    def bayesian_linear_model(self, x_expanded_already: bool = False):
+    def bayesian_linear_model(self, x_expanded_already: bool=False, input_domain=INPUT_DOMAIN, shift_mean: bool=False, flip_center: bool=False, central_interval=CENTRAL_DOMAIN, mask=None):
         r"""
         :param x_expanded_already: bool, whether the input x is already expanded to
                 [B, num_kernels, num_functions, ..., D] or [B, 1, 1, ..., D]
-
+        :param input_domain: Tuple[Union[float, torch.Tensor], Union[float, torch.Tensor]], the interval to calculate the mean of the function
+                if torch.Tensor is provided, please ensure the shape can be broadcasted into [num_kernels, num_functions, D]
+        :param shift_mean: bool, whether to shift the mean of the function to zero (GP function in a small window doesn't always average to prior mean)
+        :param flip_center: bool, weather center of the interval is flip to positive
+        :param central_interval: Tuple[Union[float, torch.Tensor], Union[float, torch.Tensor]], the center interval if flip_center==True
+                if torch.Tensor is provided, please ensure the shape can be broadcasted into [num_kernels, num_functions, D]
+        :param mask: [num_kernels, num_functions, D] if given, can mask out dimensions
+        
         return Bayesian linear model f as a function
         see [1] and page 3 of [2] for details
 
@@ -184,14 +203,14 @@ class BaseElementaryKernelPytorch(gpytorch.kernels.Kernel):
         if not self.has_fourier_feature:
             raise NotImplementedError
         else:
-            assert_msg = "no fourier samples, please first make samples (method 'sample_fourier_features(number_of_fourier_features)')"
-            assert hasattr(self, "_weight"), assert_msg
-            assert hasattr(self, "_omega"), assert_msg
-            assert hasattr(self, "_bias"), assert_msg
-            return BayesianLinearModel(self._omega, self._bias, self._weight, x_expanded_already)
-
+            assert_msg = 'no fourier samples, please first make samples (method \'sample_fourier_features(number_of_fourier_features)\')'
+            assert hasattr(self, '_weight'), assert_msg
+            assert hasattr(self, '_omega'), assert_msg
+            assert hasattr(self, '_bias'), assert_msg
+            return BayesianLinearModel(self._omega, self._bias, self._weight, x_expanded_already, input_domain=input_domain, shift_mean=shift_mean, flip_center=flip_center, central_interval=central_interval, mask=mask)
 
 class RBFKernelPytorch(BaseElementaryKernelPytorch):
+
     has_fourier_feature = True
 
     def __init__(
@@ -213,32 +232,34 @@ class RBFKernelPytorch(BaseElementaryKernelPytorch):
         if add_prior:
             lengthscale_prior = gpytorch.priors.GammaPrior(a_lengthscale, b_lengthscale)
             outputscale_prior = gpytorch.priors.GammaPrior(a_variance, b_variance)
-            rbf_kernel = gpytorch.kernels.RBFKernel(
-                ard_num_dims=self.num_active_dimensions, lengthscale_prior=lengthscale_prior
-            )
+            rbf_kernel = gpytorch.kernels.RBFKernel(ard_num_dims=self.num_active_dimensions, lengthscale_prior=lengthscale_prior)
             self.kernel = gpytorch.kernels.ScaleKernel(rbf_kernel, outputscale_prior=outputscale_prior)
         else:
             rbf_kernel = gpytorch.kernels.RBFKernel(ard_num_dims=self.num_active_dimensions)
             self.kernel = gpytorch.kernels.ScaleKernel(rbf_kernel)
 
-        if not hasattr(base_lengthscale, "__len__"):
+        if not hasattr(base_lengthscale, '__len__'):
             lengthscales = torch.full((1, self.num_active_dimensions), base_lengthscale)
         else:
             lengthscales = torch.tensor(base_lengthscale).squeeze().unsqueeze(-2)
-            assert lengthscales.shape[-1] == self.num_active_dimensions, (
-                f"number of base_lengthscale '{lengthscales.shape[-1]}' does not match input dimension '{self.num_active_dimensions}'"
-            )
+            assert lengthscales.shape[-1] == self.num_active_dimensions, f'number of base_lengthscale \'{lengthscales.shape[-1]}\' does not match input dimension \'{self.num_active_dimensions}\''
 
         rbf_kernel.lengthscale = lengthscales
         self.kernel.outputscale = torch.tensor(base_variance)
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
-        return torch.sqrt(self.kernel.outputscale)  #  # size is kernel batch size
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+        return torch.sqrt(self.kernel.outputscale) #  # size is kernel batch size
+
+    @prior_scale.setter
+    def prior_scale(self, value: torch.Tensor):
+        kernel = gpytorch.kernels.AdditiveKernel(self.kernel).to_random_module()
+        kernel.kernels[0].outputscale = value.pow(2)
+        self.kernel = kernel.kernels[0]
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         lengthscales_flattened = torch.flatten(self.kernel.base_kernel.lengthscale)
-        if hasattr(self.kernel.outputscale, "__len__"):
+        if hasattr(self.kernel.outputscale, '__len__'):
             variance_flattened = torch.flatten(self.kernel.outputscale)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.outputscale]))
@@ -251,7 +272,7 @@ class RBFKernelPytorch(BaseElementaryKernelPytorch):
     ### the followings are for fourier features
     ### the followings are for fourier features
     ### the followings are for fourier features
-    def _sample_feature_frequencies(self, L: int, num_functions: int = 1):
+    def _sample_feature_frequencies(self, L: int, num_functions: int=1, sample_executor=torch_sample, sample_name='BLM.omega'):
         # lengthscale shape: [1, input_dim] or [batch_size, 1, input_dim]
         lghscale = self.kernel.base_kernel.lengthscale
         device = lghscale.device
@@ -259,12 +280,19 @@ class RBFKernelPytorch(BaseElementaryKernelPytorch):
             kernel_batch_size = lghscale.shape[:-2]
         else:
             kernel_batch_size = torch.Size([1])
-        omega = torch.randn(size=kernel_batch_size + (num_functions, L, self.num_active_dimensions), device=device).div(
-            lghscale[..., None, :, :]
+        omega_transpose_size = kernel_batch_size + (num_functions, self.num_active_dimensions, L)
+        omega_dist = dist.Normal(
+            torch.zeros(omega_transpose_size, device=device),
+            scale=1/lghscale[..., None, :, :].transpose(-1, -2).expand(omega_transpose_size)
         )
-        return torch.transpose(omega, -1, -2)
+        return sample_executor(sample_name, omega_dist)
+        #omega = torch.randn(
+        #    size= kernel_batch_size + (num_functions, L, self.num_active_dimensions),
+        #    device = device
+        #).div(lghscale[..., None, :, :]) # ~ N(0, 1 / lengthscale**2)
+        #return torch.transpose(omega, -1, -2)
 
-    def _sample_feature_weights(self, L: int, num_functions: int = 1):
+    def _sample_feature_weights(self, L: int, num_functions: int=1, sample_executor=torch_sample, sample_name='BLM.weight'):
         # outputscale shape: no shape (scalar) or [batch_size, ]
         scale = self.kernel.outputscale
         device = scale.device
@@ -272,11 +300,14 @@ class RBFKernelPytorch(BaseElementaryKernelPytorch):
             kernel_batch_size = scale.shape
         else:
             kernel_batch_size = torch.Size([1])
-        weights = torch.sqrt(scale.reshape(kernel_batch_size + (1, 1))) * torch.randn(
-            size=kernel_batch_size + (num_functions, L), device=device
-        )  # ~ N(0, kernel_variance)
-        return weights
-
+        weight_dist = dist.Normal(
+            torch.zeros(kernel_batch_size + (num_functions, L), device=device),
+            scale=torch.sqrt(scale.reshape(kernel_batch_size + (1, 1)))
+        )
+        return sample_executor(sample_name, weight_dist)
+        #weights = torch.sqrt(scale.reshape(kernel_batch_size + (1, 1))) * \
+        #            torch.randn(size=kernel_batch_size + (num_functions, L), device=device) # ~ N(0, kernel_variance)
+        #return weights
 
 class Matern52KernelPytorch(BaseElementaryKernelPytorch):
     def __init__(
@@ -306,24 +337,28 @@ class Matern52KernelPytorch(BaseElementaryKernelPytorch):
             matern_kernel = gpytorch.kernels.MaternKernel(nu=2.5, ard_num_dims=self.num_active_dimensions)
             self.kernel = gpytorch.kernels.ScaleKernel(matern_kernel)
 
-        if not hasattr(base_lengthscale, "__len__"):
+        if not hasattr(base_lengthscale, '__len__'):
             lengthscales = torch.full((1, self.num_active_dimensions), base_lengthscale)
         else:
             lengthscales = torch.tensor(base_lengthscale).squeeze().unsqueeze(-2)
-            assert lengthscales.shape[-1] == self.num_active_dimensions, (
-                f"number of base_lengthscale '{lengthscales.shape[-1]}' does not match input dimension '{self.num_active_dimensions}'"
-            )
+            assert lengthscales.shape[-1] == self.num_active_dimensions, f'number of base_lengthscale \'{lengthscales.shape[-1]}\' does not match input dimension \'{self.num_active_dimensions}\''
 
         matern_kernel.lengthscale = lengthscales
         self.kernel.outputscale = torch.tensor(base_variance)
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
-        return torch.sqrt(self.kernel.outputscale)  #  # size is kernel batch size
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+        return torch.sqrt(self.kernel.outputscale) #  # size is kernel batch size
+
+    @prior_scale.setter
+    def prior_scale(self, value: torch.Tensor):
+        kernel = gpytorch.kernels.AdditiveKernel(self.kernel).to_random_module()
+        kernel.kernels[0].outputscale = value.pow(2)
+        self.kernel = kernel.kernels[0]
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         lengthscales_flattened = torch.flatten(self.kernel.base_kernel.lengthscale)
-        if hasattr(self.kernel.outputscale, "__len__"):
+        if hasattr(self.kernel.outputscale, '__len__'):
             variance_flattened = torch.flatten(self.kernel.outputscale)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.outputscale]))
@@ -362,24 +397,28 @@ class Matern32KernelPytorch(BaseElementaryKernelPytorch):
             matern_kernel = gpytorch.kernels.MaternKernel(nu=1.5, ard_num_dims=self.num_active_dimensions)
             self.kernel = gpytorch.kernels.ScaleKernel(matern_kernel)
 
-        if not hasattr(base_lengthscale, "__len__"):
+        if not hasattr(base_lengthscale, '__len__'):
             lengthscales = torch.full((1, self.num_active_dimensions), base_lengthscale)
         else:
             lengthscales = torch.tensor(base_lengthscale).squeeze().unsqueeze(-2)
-            assert lengthscales.shape[-1] == self.num_active_dimensions, (
-                f"number of base_lengthscale '{lengthscales.shape[-1]}' does not match input dimension '{self.num_active_dimensions}'"
-            )
+            assert lengthscales.shape[-1] == self.num_active_dimensions, f'number of base_lengthscale \'{lengthscales.shape[-1]}\' does not match input dimension \'{self.num_active_dimensions}\''
 
         matern_kernel.lengthscale = lengthscales
         self.kernel.outputscale = torch.tensor(base_variance)
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
-        return torch.sqrt(self.kernel.outputscale)  #  # size is kernel batch size
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+        return torch.sqrt(self.kernel.outputscale) #  # size is kernel batch size
+
+    @prior_scale.setter
+    def prior_scale(self, value: torch.Tensor):
+        kernel = gpytorch.kernels.AdditiveKernel(self.kernel).to_random_module()
+        kernel.kernels[0].outputscale = value.pow(2)
+        self.kernel = kernel.kernels[0]
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         lengthscales_flattened = torch.flatten(self.kernel.base_kernel.lengthscale)
-        if hasattr(self.kernel.outputscale, "__len__"):
+        if hasattr(self.kernel.outputscale, '__len__'):
             variance_flattened = torch.flatten(self.kernel.outputscale)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.outputscale]))
@@ -415,9 +454,7 @@ class PeriodicKernelPytorch(BaseElementaryKernelPytorch):
             period_prior = gpytorch.priors.GammaPrior(a_period, b_period)
             outputscale_prior = gpytorch.priors.GammaPrior(a_variance, b_variance)
             periodic_kernel = PeriodicKernel(
-                ard_num_dims=self.num_active_dimensions,
-                period_length_prior=period_prior,
-                lengthscale_prior=lengthscale_prior,
+                ard_num_dims=self.num_active_dimensions, period_length_prior=period_prior, lengthscale_prior=lengthscale_prior
             )
             # periodic_kernel.register_prior(
             #    "lengthscale_prior",
@@ -430,13 +467,11 @@ class PeriodicKernelPytorch(BaseElementaryKernelPytorch):
             periodic_kernel = PeriodicKernel(ard_num_dims=self.num_active_dimensions)
             self.kernel = gpytorch.kernels.ScaleKernel(periodic_kernel)
 
-        if not hasattr(base_lengthscale, "__len__"):
+        if not hasattr(base_lengthscale, '__len__'):
             lengthscales = torch.full((1, self.num_active_dimensions), base_lengthscale)
         else:
             lengthscales = torch.tensor(base_lengthscale).squeeze().unsqueeze(-2)
-            assert lengthscales.shape[-1] == self.num_active_dimensions, (
-                f"number of base_lengthscale '{lengthscales.shape[-1]}' does not match input dimension '{self.num_active_dimensions}'"
-            )
+            assert lengthscales.shape[-1] == self.num_active_dimensions, f'number of base_lengthscale \'{lengthscales.shape[-1]}\' does not match input dimension \'{self.num_active_dimensions}\''
 
         periods = torch.full((1, self.num_active_dimensions), base_period)
         periodic_kernel.lengthscale = lengthscales
@@ -444,12 +479,18 @@ class PeriodicKernelPytorch(BaseElementaryKernelPytorch):
         self.kernel.outputscale = base_variance
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
-        return torch.sqrt(self.kernel.outputscale)  #  # size is kernel batch size
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+        return torch.sqrt(self.kernel.outputscale) #  # size is kernel batch size
+
+    @prior_scale.setter
+    def prior_scale(self, value: torch.Tensor):
+        kernel = gpytorch.kernels.AdditiveKernel(self.kernel).to_random_module()
+        kernel.kernels[0].outputscale = value.pow(2)
+        self.kernel = kernel.kernels[0]
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         lengthscales_flattened = torch.flatten(self.kernel.base_kernel.lengthscale)
-        if hasattr(self.kernel.outputscale, "__len__"):
+        if hasattr(self.kernel.outputscale, '__len__'):
             variance_flattened = torch.flatten(self.kernel.outputscale)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.outputscale]))
@@ -486,9 +527,7 @@ class RQKernelPytorch(BaseElementaryKernelPytorch):
             lengthscale_prior = gpytorch.priors.GammaPrior(a_lengthscale, b_lengthscale)
             alpha_prior = gpytorch.priors.GammaPrior(a_alpha, b_alpha)
             outputscale_prior = gpytorch.priors.GammaPrior(a_variance, b_variance)
-            rq_kernel = gpytorch.kernels.RQKernel(
-                ard_num_dims=self.num_active_dimensions, lengthscale_prior=lengthscale_prior
-            )
+            rq_kernel = gpytorch.kernels.RQKernel(ard_num_dims=self.num_active_dimensions, lengthscale_prior=lengthscale_prior)
             rq_kernel.register_prior(
                 "alpha_prior",
                 alpha_prior,
@@ -500,25 +539,29 @@ class RQKernelPytorch(BaseElementaryKernelPytorch):
             rq_kernel = gpytorch.kernels.RQKernel(ard_num_dims=self.num_active_dimensions)
             self.kernel = gpytorch.kernels.ScaleKernel(rq_kernel)
 
-        if not hasattr(base_lengthscale, "__len__"):
+        if not hasattr(base_lengthscale, '__len__'):
             lengthscales = torch.full((1, self.num_active_dimensions), base_lengthscale)
         else:
             lengthscales = torch.tensor(base_lengthscale).squeeze().unsqueeze(-2)
-            assert lengthscales.shape[-1] == self.num_active_dimensions, (
-                f"number of base_lengthscale '{lengthscales.shape[-1]}' does not match input dimension '{self.num_active_dimensions}'"
-            )
+            assert lengthscales.shape[-1] == self.num_active_dimensions, f'number of base_lengthscale \'{lengthscales.shape[-1]}\' does not match input dimension \'{self.num_active_dimensions}\''
 
         rq_kernel.lengthscale = lengthscales
         rq_kernel.alpha = torch.tensor(base_alpha)
         self.kernel.outputscale = torch.tensor(base_variance)
 
     @property
-    def prior_scale(self):  # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
-        return torch.sqrt(self.kernel.outputscale)  #  # size is kernel batch size
+    def prior_scale(self): # this would work for matern family, RQ kernel, linear kernel, spectral mixture kernel
+        return torch.sqrt(self.kernel.outputscale) #  # size is kernel batch size
+
+    @prior_scale.setter
+    def prior_scale(self, value: torch.Tensor):
+        kernel = gpytorch.kernels.AdditiveKernel(self.kernel).to_random_module()
+        kernel.kernels[0].outputscale = value.pow(2)
+        self.kernel = kernel.kernels[0]
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         lengthscales_flattened = torch.flatten(self.kernel.base_kernel.lengthscale)
-        if hasattr(self.kernel.outputscale, "__len__"):
+        if hasattr(self.kernel.outputscale, '__len__'):
             variance_flattened = torch.flatten(self.kernel.outputscale)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.outputscale]))
@@ -549,9 +592,7 @@ class LinearKernelPytorch(BaseElementaryKernelPytorch):
         a_offset, b_offset = offset_prior_parameters
         if add_prior:
             variance_prior = gpytorch.priors.GammaPrior(a_variance, b_variance)
-            self.kernel = gpytorch.kernels.LinearKernel(
-                num_dimensions=self.num_active_dimensions, variance_prior=variance_prior
-            )
+            self.kernel = gpytorch.kernels.LinearKernel(num_dimensions=self.num_active_dimensions, variance_prior=variance_prior)
         else:
             self.kernel = gpytorch.kernels.LinearKernel(num_dimensions=self.num_active_dimensions)
         self.kernel.variance = torch.tensor(base_variance)
@@ -585,14 +626,22 @@ class LinearKernelPytorch(BaseElementaryKernelPytorch):
             value = torch.as_tensor(value).to(self.raw_offset)
         self.initialize(raw_offset=self.raw_offset_constraint.inverse_transform(value))
 
-    def forward(self, x1, x2, diag=False, last_dim_is_batch=False, **params):
+    def forward(self, x1, x2, diag=False, last_dim_is_batch=False, *, mask=None, **params):
         assert not last_dim_is_batch
-        K = self.kernel.forward(x1, x2, diag, last_dim_is_batch, **params) + self.offset
+        if not mask is None:
+            assert not last_dim_is_batch or (mask.shape[-1]==1 and torch.all(mask==1)), "no dimension to be masked (last_dim_is_batch take only one dim)"
+            # note: replacing by 0 works for the linear kernel because we compute inner(x1, x2)
+            # however this is not a valid masking for general kernels
+            x1_ = x1.masked_fill(mask.unsqueeze(-2)==0, 0)
+            x2_ = x2
+        else:
+            x1_, x2_ = x1, x2
+        K = self.kernel.forward(x1_, x2_, diag, last_dim_is_batch, **params) + self.offset
         return K
 
     def get_parameters_flattened(self, sqrt_variance=True) -> torch.tensor:
         offset_flattened = torch.flatten(torch.tensor([self.offset]))
-        if hasattr(self.kernel.variance, "__len__"):
+        if hasattr(self.kernel.variance, '__len__'):
             variance_flattened = torch.flatten(self.kernel.variance)
         else:
             variance_flattened = torch.flatten(torch.tensor([self.kernel.variance]))
@@ -611,36 +660,38 @@ if __name__ == "__main__":
     print(X.numpy())
     print(K.detach().numpy())
 
-    rbf_kernel = RBFKernelPytorch(2, [0.2, 0.4], 1.0, False, (1.0, 1.0), (1.0, 1.0), False, 0, "RBF")
+    rbf_kernel = RBFKernelPytorch(2, [0.2, 0.4], 1.0, False,(1.0, 1.0), (1.0, 1.0), False, 0, "RBF")
     print(rbf_kernel.kernel.outputscale)
     print(rbf_kernel.kernel.base_kernel.lengthscale)
 
     from matplotlib import pyplot as plt
-
     Q = 5
     D = 1
-    num_func = 5
-    kernel = RBFKernelPytorch(D, 0.5, 1.0, False, (1, 1), (1, 1), False, 0, "RBF")
+    num_func = 2
+    num_gram = 1000
+    kernel = RBFKernelPytorch(D, 0.2, 1.0, False, (1, 1), (1, 1), False, 0, "RBF")
     print(kernel.get_parameters_flattened())
-    kernel.sample_fourier_features(50, num_func)
-    f = kernel.bayesian_linear_model()
+    kernel.sample_fourier_features(500, num_func)
+    f = kernel.bayesian_linear_model(shift_mean=True, input_domain=(0, 1))
 
-    X = torch.randn([100, D])
-    Y_rff = f(X).cpu().detach().squeeze()
-    Y_gp = (
-        torch.distributions.MultivariateNormal(
-            torch.zeros(100), covariance_matrix=kernel(X).evaluate() + 0.0004 * torch.eye(100)
-        )
-        .sample([num_func])
-        .cpu()
-        .detach()
-    )
+    X = torch.rand([num_gram, D])
+    Y_rff = f(X).cpu().detach().squeeze().T
+    Y_gp = torch.distributions.MultivariateNormal(
+        torch.zeros(num_gram),
+        covariance_matrix=kernel(X).to_dense() + 0.0004 * torch.eye(num_gram)
+    ).sample([num_func]).cpu().detach()
     print(X.shape, Y_rff.shape, Y_gp.shape)
 
+    func_means = f.mean([0, 1]).detach().cpu().numpy()
+
     fig, ax = plt.subplots(1, 2)
+    ax[0].axhline(0, color='k')
     for i in range(num_func):
-        ax[0].plot(X, Y_rff[i], ".")
-        ax[1].plot(X, Y_gp[i], ".")
-    ax[0].set_title("rff")
-    ax[1].set_title("gp")
+        ax[0].plot(X, Y_rff[i], '.', color=f'C{i}', label=f'det_mean : %.2f,\nsamp_mean: %.2f'%(func_means[0,i], Y_rff[i].mean()) )
+        ax[0].axhline(func_means[0,i], xmin=-1, xmax=1, color=f'C{i}', linewidth=1.0, linestyle="--")
+        ax[1].plot(X, Y_gp[i], '.')
+    ax[0].legend()
+    ax[0].set_title('rff')
+    ax[1].set_title('gp')
     plt.show()
+

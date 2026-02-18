@@ -12,16 +12,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing import List
+from typing import Tuple,List
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 
-
 class BasicNKNConfig(BaseKernelConfig):
-    middle_layer_list: List[int] = [4, 2]
-    base_lengthscale: float = 1.0
-    base_variance: float = 1.0
+    middle_layer_list : List[int] = [4,2]
+    base_lengthscale : float = 1.0
+    base_variance : float = 1.0
     base_period: float = 1.0
-    base_alpha: float = 1.0
-    init_linear_layer_a: float = 0.0
-    init_linear_layer_b: float = 1.0
-    name: str = "BasicNKN"
+    base_alpha : float = 1.0
+    init_linear_layer_a : float = 0.0
+    init_linear_layer_b : float = 1.0
+    name : str = "BasicNKN"

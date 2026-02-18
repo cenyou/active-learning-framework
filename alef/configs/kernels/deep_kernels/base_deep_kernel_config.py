@@ -12,9 +12,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from pydantic import BaseSettings
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.configs.models.feature_extractors.base_feature_extractor_config import BaseFeatureExtractorConfig
-from typing import Tuple
+from typing import Tuple, Type
 
 
 class BaseDeepKernelConfig(BaseKernelConfig):

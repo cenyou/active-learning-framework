@@ -14,8 +14,12 @@
 
 from alef.configs.models.base_model_config import BaseModelConfig
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
+from alef.configs.kernels.hhk_configs import HHKEightLocalDefaultConfig
+from alef.models.gp_model_mcmc_proposals import BaseGpModelMCMCProposal, AdditiveGPMCMCProposal
+from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.models.gp_model_mcmc import InternalInferenceType
 from typing import List
+import gpflow
 from alef.configs.prior_parameters import EXPECTED_OBSERVATION_NOISE
 
 

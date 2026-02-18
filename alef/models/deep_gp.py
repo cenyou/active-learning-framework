@@ -17,25 +17,21 @@ from typing import Optional, Tuple
 import numpy as np
 import tensorflow as tf
 from alef.models.base_model import BaseModel
+import gpflux
+import gpflow
 from gpflux.architectures import Config, build_constant_input_dim_deep_gp
 from scipy.stats import norm
-from alef.utils.utils import normal_entropy
+from alef.utils.utils import k_means, normal_entropy
 
 tf.keras.backend.set_floatx("float64")
 tf.get_logger().setLevel("WARNING")
-logger = logging.getLogger(__name__)
+
+from alef.utils.custom_logging import getLogger
+logger = getLogger(__name__)
 
 
 class DeepGP(BaseModel):
-    def __init__(
-        self,
-        n_layer: int,
-        max_n_inducing_points: int,
-        learning_rate: float,
-        n_iter: int,
-        initial_likelihood_noise_variance: float,
-        **kwargs,
-    ):
+    def __init__(self, n_layer: int, max_n_inducing_points: int, learning_rate: float, n_iter: int, initial_likelihood_noise_variance: float, **kwargs):
         self.n_layer = n_layer
         self.max_n_inducing_points = max_n_inducing_points
         self.learning_rate = learning_rate
@@ -48,12 +44,7 @@ class DeepGP(BaseModel):
             n_inducing_points = x_data.shape[0]
         else:
             n_inducing_points = self.max_n_inducing_points
-        config = Config(
-            num_inducing=n_inducing_points,
-            inner_layer_qsqrt_factor=self.q_sqrt_scaling,
-            likelihood_noise_variance=self.initial_likelihood_noise_variance,
-            whiten=True,
-        )
+        config = Config(num_inducing=n_inducing_points, inner_layer_qsqrt_factor=self.q_sqrt_scaling, likelihood_noise_variance=self.initial_likelihood_noise_variance, whiten=True)
         self.dgp = build_constant_input_dim_deep_gp(x_data, num_layers=self.n_layer, config=config)
 
     def predictive_dist(self, x_test: np.array) -> Tuple[np.array, np.array]:
@@ -86,5 +77,5 @@ class DeepGP(BaseModel):
     def reset_model(self):
         pass
 
-    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> np.float:
+    def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         raise NotImplementedError

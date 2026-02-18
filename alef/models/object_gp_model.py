@@ -15,8 +15,9 @@
 from typing import List, Tuple
 from alef.enums.global_model_enums import InitialParameters
 from alef.models.gp_model import GPModel, PredictionQuantity
+import gpflow
 import numpy as np
-from gpflow.utilities import set_trainable
+from gpflow.utilities import print_summary, set_trainable
 from tensorflow_probability import distributions as tfd
 from alef.kernels.base_object_kernel import BaseObjectKernel
 from alef.models.object_gpr import ObjectGPR
@@ -42,7 +43,7 @@ class ObjectGpModel(GPModel):
         set_prior_on_observation_noise: bool,
         expected_observation_noise: float,
         prediction_quantity: PredictionQuantity,
-        **kwargs,
+        **kwargs
     ):
         super().__init__(
             kernel=kernel,
@@ -60,10 +61,10 @@ class ObjectGpModel(GPModel):
             set_prior_on_observation_noise=set_prior_on_observation_noise,
             expected_observation_noise=expected_observation_noise,
             prediction_quantity=prediction_quantity,
-            **kwargs,
+            **kwargs
         )
 
-    def build_model(self, x_data: List[object], y_data: np.array):
+    def build_model(self, x_data: List[object], y_data: np.array, *args, **kwargs):
         if self.use_mean_function:
             self.model = ObjectGPR(
                 data=(x_data, y_data),
@@ -72,9 +73,7 @@ class ObjectGpModel(GPModel):
                 mean_function=self.mean_function,
             )
         else:
-            self.model = ObjectGPR(
-                data=(x_data, y_data), kernel=self.kernel, noise_variance=np.power(self.observation_noise, 2.0)
-            )
+            self.model = ObjectGPR(data=(x_data, y_data), kernel=self.kernel, noise_variance=np.power(self.observation_noise, 2.0))
         set_trainable(self.model.likelihood.variance, self.train_likelihood_variance)
         if self.set_prior_on_observation_noise:
             self.model.likelihood.variance.prior = tfd.Exponential(1 / np.power(self.expected_observation_noise, 2.0))

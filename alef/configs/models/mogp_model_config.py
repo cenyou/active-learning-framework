@@ -16,18 +16,16 @@ from alef.configs.models.base_model_config import BaseModelConfig
 from alef.configs.kernels.base_kernel_config import BaseKernelConfig
 from alef.enums.global_model_enums import PredictionQuantity
 
-
 class BasicMOGPModelConfig(BaseModelConfig):
     kernel_config: BaseKernelConfig
-    observation_noise: float = 0.1
-    expected_observation_noise: float = 0.3
-    optimize_hps: bool = True
-    train_likelihood_variance: bool = True
-    pertube_parameters_at_start: bool = False
-    set_prior_on_observation_noise: bool = False
+    observation_noise : float = 0.1
+    expected_observation_noise : float = 0.3
+    optimize_hps : bool = True
+    train_likelihood_variance : bool = True
+    pertube_parameters_at_start : bool =False
+    set_prior_on_observation_noise : bool =False
     prediction_quantity: PredictionQuantity = PredictionQuantity.PREDICT_Y
-    name: str = "BasicMOGP"
+    name : str = "BasicMOGP"
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     config = BasicMOGPModelConfig()

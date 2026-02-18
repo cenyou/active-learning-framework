@@ -12,43 +12,38 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from typing import List, Union, Sequence
 from alef.configs.experiment.simulator_configs.base_simulator_config import BaseSimulatorConfig
 from alef.enums.simulator_enums import InitialDataGenerationMethod
-
 
 class SingleTaskBraninConfig(BaseSimulatorConfig):
     n_pool: int
     data_path: str
-    additional_safety: bool = False
-    oracle_type: str = "branin0"
-
+    additional_safety: bool=False
+    oracle_type: str="branin0"
+    
     initial_data_source: InitialDataGenerationMethod = InitialDataGenerationMethod.FILE
-
-    observation_noise: float = 0.01
-    seed: int = 1234
-    name: str = "single_task_branin"
-
+    
+    observation_noise: float=0.01
+    seed: int=1234
+    name: str='single_task_branin'
 
 class SingleTaskBranin0Config(SingleTaskBraninConfig):
-    oracle_type: str = "branin0"  # only affect initial data in this case
-    name: str = "single_task_branin0"
-
+    oracle_type: str="branin0" # only affect initial data in this case
+    name: str='single_task_branin0'
 
 class SingleTaskBranin1Config(SingleTaskBraninConfig):
-    oracle_type: str = "branin1"  # only affect initial data in this case
-    name: str = "single_task_branin1"
-
+    oracle_type: str="branin1" # only affect initial data in this case
+    name: str='single_task_branin1'
 
 class SingleTaskBranin2Config(SingleTaskBraninConfig):
-    oracle_type: str = "branin2"  # only affect initial data in this case
-    name: str = "single_task_branin2"
-
+    oracle_type: str="branin2" # only affect initial data in this case
+    name: str='single_task_branin2'
 
 class SingleTaskBranin3Config(SingleTaskBraninConfig):
-    oracle_type: str = "branin3"  # only affect initial data in this case
-    name: str = "single_task_branin3"
-
+    oracle_type: str="branin3" # only affect initial data in this case
+    name: str='single_task_branin3'
 
 class SingleTaskBranin4Config(SingleTaskBraninConfig):
-    oracle_type: str = "branin4"  # only affect initial data in this case
-    name: str = "single_task_branin4"
+    oracle_type: str="branin4" # only affect initial data in this case
+    name: str='single_task_branin4'

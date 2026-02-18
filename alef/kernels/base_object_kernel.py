@@ -14,11 +14,12 @@
 
 from typing import List, Optional
 import gpflow
-from abc import ABC, abstractmethod
+from abc import ABC,abstractmethod
 import tensorflow as tf
 
 
-class BaseObjectKernel(gpflow.kernels.Kernel, ABC):
+class BaseObjectKernel(gpflow.kernels.Kernel,ABC):
+
     @abstractmethod
     def K(self, X: List[object], X2: Optional[List[object]] = None) -> tf.Tensor:
         raise NotImplementedError

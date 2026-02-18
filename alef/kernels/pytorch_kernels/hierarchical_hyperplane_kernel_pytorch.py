@@ -67,15 +67,10 @@ class HierarchicalHyperplaneKernelPytorch(gpytorch.kernels.Kernel):
             )
 
     def register_hyperplane_params(self):
-        self.register_parameter(
-            name="hyperplanes", parameter=torch.nn.Parameter(torch.randn(self.input_dimension + 1, self.M) * 0.1)
-        )
+        self.register_parameter(name="hyperplanes", parameter=torch.nn.Parameter(torch.randn(self.input_dimension + 1, self.M) * 0.1))
         if self.add_prior:
             self.register_prior(
-                "hyperplanes_prior",
-                gpytorch.priors.NormalPrior(0.0, 1.0),
-                lambda m: m.hyperplanes,
-                lambda m, v: m._set_hyperplanes(v),
+                "hyperplanes_prior", gpytorch.priors.NormalPrior(0.0, 1.0), lambda m: m.hyperplanes, lambda m, v: m._set_hyperplanes(v)
             )
 
     def _set_hyperplanes(self, value):
@@ -138,9 +133,7 @@ class HierarchicalHyperplaneKernelPytorch(gpytorch.kernels.Kernel):
         self.n_experts = self.left_matrix.shape[0]  ## Number of experts
         self.M = self.left_matrix.shape[1]  ## Number of gate nodes
         assert self.n_experts == self.right_matrix.shape[0]
-        assert (self.left_matrix.shape[0] * self.left_matrix.shape[1]) == (
-            (self.left_matrix == 0).sum() + (self.left_matrix == 1).sum()
-        )
+        assert (self.left_matrix.shape[0] * self.left_matrix.shape[1]) == ((self.left_matrix == 0).sum() + (self.left_matrix == 1).sum())
         assert (self.right_matrix.shape[0] * self.right_matrix.shape[1]) == (
             (self.right_matrix == 0).sum() + (self.right_matrix == 1).sum()
         )
@@ -162,12 +155,8 @@ class HierarchicalHyperplaneKernelPytorch(gpytorch.kernels.Kernel):
                 w_rest = w[1:].unsqueeze(0)
                 smoothing = self.smoothing[j]
                 prob_elem = torch.pow(
-                    self.sigmoid(w_0 + torch.matmul(X, torch.transpose(w_rest, 0, 1)), smoothing),
-                    self.left_matrix[k, j],
-                ) * torch.pow(
-                    1 - self.sigmoid(w_0 + torch.matmul(X, torch.transpose(w_rest, 0, 1)), smoothing),
-                    self.right_matrix[k, j],
-                )
+                    self.sigmoid(w_0 + torch.matmul(X, torch.transpose(w_rest, 0, 1)), smoothing), self.left_matrix[k, j]
+                ) * torch.pow(1 - self.sigmoid(w_0 + torch.matmul(X, torch.transpose(w_rest, 0, 1)), smoothing), self.right_matrix[k, j])
                 prob = prob * torch.squeeze(prob_elem)
             prob = prob.unsqueeze(-1)
             expert_probabilities.append(prob)
@@ -185,9 +174,7 @@ class HierarchicalHyperplaneKernelPytorch(gpytorch.kernels.Kernel):
         gate_x2 = self.gate(x2)
         output = torch.zeros((x1.shape[0], x2.shape[0]))
         for k in range(0, self.n_experts):
-            output += torch.matmul(gate_x[k], torch.transpose(gate_x2[k], 0, 1)) * self.kernel_list[k].forward(
-                x1, x2, diag=False
-            )
+            output += torch.matmul(gate_x[k], torch.transpose(gate_x2[k], 0, 1)) * self.kernel_list[k].forward(x1, x2, diag=False)
         return output
 
 
