@@ -18,17 +18,11 @@ from typing import Tuple, Union, Sequence, List
 import json
 import os
 from typing import List, Union
-import gpflow
-import gpytorch
 import numpy as np
 from scipy import integrate
 from scipy.stats import norm
 from sklearn.cluster import KMeans
 import math
-import tensorflow as tf
-from distutils import util
-
-from alef.kernels.kernel_grammar.kernel_grammar import BaseKernelGrammarExpression
 
 
 def gmm_density(y, mus, sigmas, weights):
@@ -46,10 +40,6 @@ def gmm_entropy_integrand(y, mus, sigmas, weights):
         return 0.0
     else:
         return -1 * p * np.log(p)
-
-
-def sigmoid_tf(x: tf.Tensor):
-    return 1.0 / (1.0 + tf.exp(-1.0 * x))
 
 
 def entropy_of_gmm(mus, sigmas, weights, uniform_weights):
@@ -221,11 +211,6 @@ def twod_array_to_list_over_arrays(array):
     return list_over_arrays
 
 
-def manhatten_distance(X: np.array, X2: np.array) -> tf.Tensor:
-    differences = gpflow.utilities.ops.difference_matrix(X, X2)
-    return tf.reduce_sum(tf.math.abs(differences), axis=2)
-
-
 def draw_from_hp_prior_and_assign(kernel):
     print("-Draw from hyperparameter prior")
     for parameter in kernel.trainable_parameters:
@@ -286,15 +271,6 @@ def check1Dlist(variables, dimension: int):
     return output
 
 
-def print_gpytorch_parameters(module: gpytorch.Module):
-    print("Model parameters:")
-    for name, param, constraint in module.named_parameters_and_constraints():
-        if constraint is not None:
-            print(f"Parameter name: {name:55} value = {constraint.transform(param)}")
-        else:
-            print(f"Parameter name: {name:55} value = {param}")
-
-
 def write_list_to_file(alist: List[Union[float, int, str]], file_path: str):
     with open(file_path, "w") as f:
         for line in alist:
@@ -329,66 +305,10 @@ def read_dict_from_json(file_path: str):
     return dictionary
 
 
-def write_gpflow_model_summary_to_file(model: gpflow.models.BayesianModel, model_name: str, folder: str):
-    parameter_dict = gpflow.utilities.traversal.parameter_dict(model)
-    parameter_string_list = []
-    for parameter_name in parameter_dict:
-        parameter = parameter_dict[parameter_name]
-        parameter_string = parameter_name + " value=" + str(parameter.numpy())
-        parameter_string_list.append(parameter_string)
-    file_path = os.path.join(folder, model_name + "_parameter_summary.txt")
-    write_list_to_file(parameter_string_list, file_path)
-
-
-def get_hp_sample_from_prior_gpytorch_as_state_dict(expression: BaseKernelGrammarExpression, wrap_in_addition=True):
-    kernel = expression.get_kernel()
-    if wrap_in_addition:
-        kernel = gpytorch.kernels.AdditiveKernel(kernel)
-    kernel = kernel.pyro_sample_from_prior()
-    state_dict = kernel.state_dict()
-    return state_dict
-
-
-def get_gpytorch_kernel_from_expression_and_state_dict(expression: BaseKernelGrammarExpression, state_dict, wrap_in_addition=True):
-    kernel = expression.get_kernel()
-    if wrap_in_addition:
-        kernel = gpytorch.kernels.AdditiveKernel(kernel)
-    kernel.load_state_dict(state_dict)
-    return kernel
-
-
 def get_datetime_as_string():
     now = datetime.now()
     date_time = now.strftime("%m_%d_%Y_%H_%M_%S")
     return date_time
-
-
-def get_gpytorch_exponential_prior(lambda_param: float):
-    """
-    Returns an exponential prior with lambda_param as lambda -
-    uses the Gamma prior of gpytorch with alpha=1 and beta=lambda
-    (see for equivalence https://de.wikipedia.org/wiki/Gammaverteilung)
-    """
-    return gpytorch.priors.GammaPrior(1.0, lambda_param)
-
-
-def tf_delta(X, X2):
-    r"""
-    X: [N, D] array
-    X2: [M, D] array
-
-    return:
-        [N, M] bool array, [output]_nm is 1 if [X]_n == [X2]_m, is 0 if not equal
-    """
-    shape = tf.concat([tf.shape(X)[:-1], tf.shape(X2)[:-1]], axis=0)
-    
-    A = tf.expand_dims(X, axis=-1) # [..., N, D, 1]
-    B = tf.einsum("...ijk->...kji", tf.expand_dims(X2, axis=-1) ) # [..., 1, D, M]
-    
-    return tf.math.equal(
-            tf.reduce_sum(tf.square(A - B), axis=-2),
-            tf.zeros(shape, dtype=X.dtype)
-        )
 
 
 if __name__ == "__main__":

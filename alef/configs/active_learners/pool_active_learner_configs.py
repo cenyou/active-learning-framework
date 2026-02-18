@@ -19,7 +19,7 @@ from alef.configs.acquisition_functions.al_acquisition_functions.pred_variance_c
 from alef.configs.acquisition_functions.al_acquisition_functions.pred_entropy_config import BasicPredEntropyConfig
 from alef.configs.acquisition_functions.al_acquisition_functions.acq_random_config import BasicRandomConfig
 from alef.enums.active_learner_enums import ValidationType
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import json
 
 

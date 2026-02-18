@@ -17,14 +17,13 @@ import numpy as np
 import torch
 from typing import List, Tuple, Optional, Callable
 from alef.models.base_model import BaseModel
-from alef.models.batch_model_interface import BatchModelInterace
 from alef.models.pfn.pfn import PFN
 import logging
 from alef.utils.custom_logging import getLogger
 
 logger = getLogger(__name__)
 
-class PFNModel(BaseModel, BatchModelInterace):
+class PFNModel(BaseModel):
     """
     Class that implements standard PFN regression for our API
     """
@@ -74,8 +73,6 @@ class PFNModel(BaseModel, BatchModelInterace):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-        self.print_model_summary()
-
         self.print_summaries = True
 
         self.xc = None
@@ -101,9 +98,10 @@ class PFNModel(BaseModel, BatchModelInterace):
         pass
 
     def print_model_summary(self):
-        total_params = sum(p.numel() for p in self.model.parameters())
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        print(f"Model built: {trainable_params:,} trainable parameters (total: {total_params:,})")
+        if logger.isEnabledFor(logging.DEBUG):
+            total_params = sum(p.numel() for p in self.model.parameters())
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            print(f"Model built: {trainable_params:,} trainable parameters (total: {total_params:,})")
 
     def estimate_model_evidence(self, x_data: Optional[np.array] = None, y_data: Optional[np.array] = None) -> float:
         raise NotImplementedError
@@ -159,8 +157,8 @@ class PFNModel(BaseModel, BatchModelInterace):
         assert self.xc is not None and self.yc is not None, "Model has not been inferred yet. Please call infer() first."
         with torch.no_grad():
             xt = torch.tensor(x_test, dtype=torch.float32).to(self.device).unsqueeze(0)  # [1, N, d]
-            ent = self.model.predictive_entropy(self.xc, self.yc, xt).cpu() # [1, N, 1]
-            return ent.squeeze(0).numpy()
+            ent = self.model.predictive_entropy(self.xc, self.yc, xt) # [1, N, 1]
+            return ent.squeeze(0).cpu().numpy()
 
     def entropy_predictive_dist_full_cov(self, *args, **kwargs):
         raise NotImplementedError

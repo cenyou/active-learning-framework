@@ -13,13 +13,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Union
-from alef.acquisition_functions.al_acquisition_functions.base_al_acquisition_function import BaseALAcquisitionFunction
-from alef.acquisition_functions.bo_acquisition_functions.base_bo_acquisition_function import BaseBOAcquisitionFunction
-from alef.acquisition_functions.al_acquisition_functions.pred_entropy_batch import PredEntropyBatch
-from alef.acquisition_functions.bo_acquisition_functions.integrated_ei import IntegratedEI
 from alef.configs.acquisition_functions.al_acquisition_functions.base_al_acquisition_function_config import BaseALAcquisitionFunctionConfig
 from alef.configs.acquisition_functions.bo_acquisition_functions.base_bo_acquisition_function_config import BaseBOAcquisitionFunctionConfig
-from alef.configs.acquisition_functions.al_acquisition_functions.pred_entropy_batch_config import BasicPredEntropyBatchConfig
 from alef.configs.acquisition_functions.safe_acquisition_functions.base_safe_acquisition_function_config import (
     BaseSafeAcquisitionFunctionConfig,
 )
@@ -51,12 +46,6 @@ from alef.configs.acquisition_functions.safe_acquisition_functions.safe_discount
     BasicSafeDiscountPredEntropyAllConfig,
 )
 from .safe_acquisition_functions.safe_discount_pred_entropy import SafeDiscountPredEntropy, SafeDiscountPredEntropyAll
-from alef.configs.acquisition_functions.safe_acquisition_functions.safe_discover_config import (
-    BasicSafeDiscoverConfig,
-    BasicSafeDiscoverQuantileConfig,
-)
-from .safe_acquisition_functions.safe_discover import SafeDiscover, SafeDiscoverQuantile
-
 from alef.configs.acquisition_functions.safe_acquisition_functions.safe_opt_config import BasicSafeOptConfig
 from .safe_acquisition_functions.safe_opt import SafeOpt
 from alef.configs.acquisition_functions.safe_acquisition_functions.safe_gp_ucb_config import BasicSafeGPUCBConfig
@@ -65,12 +54,6 @@ from alef.configs.acquisition_functions.bo_acquisition_functions.ei_config impor
 from .bo_acquisition_functions.ei import EI
 from alef.configs.acquisition_functions.safe_acquisition_functions.safe_ei_config import BasicSafeEIConfig
 from .safe_acquisition_functions.safe_ei import SafeEI
-from alef.configs.acquisition_functions.safe_acquisition_functions.safe_discover_opt_config import (
-    BasicSafeDiscoverOptConfig,
-    BasicSafeDiscoverOptQuantileConfig,
-)
-from .safe_acquisition_functions.safe_discover_opt import SafeDiscoverOpt, SafeDiscoverOptQuantile
-from alef.configs.acquisition_functions.bo_acquisition_functions.integrated_ei_config import BasicIntegratedEIConfig
 from alef.acquisition_functions.bo_acquisition_functions.gp_ucb import GPUCB
 from alef.configs.acquisition_functions.bo_acquisition_functions.gp_ucb_config import BasicGPUCBConfig
 
@@ -107,27 +90,15 @@ class AcquisitionFunctionFactory:
             return MinUnsafePredEntropy(**function_config.dict())
         elif isinstance(function_config, BasicMinUnsafePredEntropyAllConfig):
             return MinUnsafePredEntropyAll(**function_config.dict())
-        elif isinstance(function_config, BasicSafeDiscoverConfig):
-            return SafeDiscover(**function_config.dict())
-        elif isinstance(function_config, BasicSafeDiscoverQuantileConfig):
-            return SafeDiscoverQuantile(**function_config.dict())
         elif isinstance(function_config, BasicSafeOptConfig):
             return SafeOpt(**function_config.dict())
         elif isinstance(function_config, BasicSafeGPUCBConfig):
             return SafeGPUCB(**function_config.dict())
         elif isinstance(function_config, BasicEIConfig):
             return EI(**function_config.dict())
-        elif isinstance(function_config, BasicIntegratedEIConfig):
-            return IntegratedEI(**function_config.dict())
         elif isinstance(function_config, BasicGPUCBConfig):
             return GPUCB(**function_config.dict())
         elif isinstance(function_config, BasicSafeEIConfig):
             return SafeEI(**function_config.dict())
-        elif isinstance(function_config, BasicSafeDiscoverOptConfig):
-            return SafeDiscoverOpt(**function_config.dict())
-        elif isinstance(function_config, BasicSafeDiscoverOptQuantileConfig):
-            return SafeDiscoverOptQuantile(**function_config.dict())
-        elif isinstance(function_config, BasicPredEntropyBatchConfig):
-            return PredEntropyBatch(**function_config.dict())
         else:
             raise NotImplementedError("Invalid config")

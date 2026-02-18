@@ -99,13 +99,14 @@ class OracleActiveLearner(BaseOracleActiveLearner):
                 self.query_time[idx] = t2 - t1
         return new_query
 
-    def learn(self, n_steps: int):
+    def learn(self, n_steps: int, start_index: int =0):
         """
         Main Active learning loop - makes n_steps queries (calls the self.oracle object at each query) and updates the model after each query with the new x_data, y_data
         - validation is done after each query
 
         Arguments:
             n_steps : int - number of active learning iteration/number of queries
+            start_index : int - starting index for the iteration count
         Returns:
             np.array - validation metrics values over the iterations
             np.array - selected queries over the iterations
@@ -116,7 +117,7 @@ class OracleActiveLearner(BaseOracleActiveLearner):
         # warmup
         self.update(-1, record_time = False)
         # start
-        for i in range(0, self.n_steps):
+        for i in range(start_index, start_index + self.n_steps):
             query = self.update(i)
             validate_this_iter = self.validation_at is None or len(self.validation_at)==0 or i in self.validation_at
 

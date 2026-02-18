@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List, Tuple, Union
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from .base_loss_configs import (
     BasicAmortizedPolicyLossConfig,
     #

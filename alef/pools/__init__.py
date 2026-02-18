@@ -30,7 +30,6 @@ from .gas_transmission_compressor_design_pool import GasTransmissionCompressorDe
 from .lsq_pool import LSQPool
 from .townsend_pool import TownsendPool
 from .simionescu_pool import SimionescuPool
-from .engine_pool import EnginePool, EngineCorrelatedPool
 from .high_pressure_fluid_system_pool import HighPressureFluidSystemPool
 
 
@@ -45,6 +44,5 @@ __all__ = [
     "LSQPool",
     "TownsendPool",
     "SimionescuPool",
-    "EnginePool", "EngineCorrelatedPool",
     "HighPressureFluidSystemPool",
 ]

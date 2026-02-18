@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List, Dict, Union, Optional
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 import json
 import torch

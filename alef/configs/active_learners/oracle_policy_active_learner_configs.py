@@ -14,7 +14,7 @@
 
 from typing import List, Optional, Union
 from alef.enums.active_learner_enums import ValidationType
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import json
 
 class BasicOraclePolicyActiveLearnerConfig(BaseSettings):

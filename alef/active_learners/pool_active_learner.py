@@ -17,19 +17,15 @@ import numpy as np
 import random
 import time
 from typing import List, Optional, Tuple, Union
-from alef.acquisition_functions.acquisition_function_factory import AcquisitionFunctionFactory
 from alef.acquisition_functions.al_acquisition_functions.base_al_acquisition_function import BaseALAcquisitionFunction
-from alef.configs.acquisition_functions.al_acquisition_functions.base_al_acquisition_function_config import BaseALAcquisitionFunctionConfig
 from alef.utils.plot_utils import (
     active_learning_1d_plot,
     active_learning_1d_plot_with_acquisition,
     active_learning_2d_plot,
     active_learning_nd_plot,
-    plot_model_specifics,
     active_learning_1d_plot_multioutput,
 )
 from alef.enums.active_learner_enums import ValidationType
-from alef.utils.utils import calculate_multioutput_rmse
 from alef.active_learners.base_active_learners import BasePoolActiveLearner
 
 
@@ -264,14 +260,6 @@ class PoolActiveLearner(BasePoolActiveLearner):
             else:
                 plot_name = "query_" + str(step) + ".png"
                 active_learning_nd_plot(self.x_data, self.y_data, self.save_plots, plot_name, self.plot_path)
-
-            if self.save_plots:
-                plot_name = "model_specific" + str(step) + ".png"
-                plot_model_specifics(
-                    x_plot, self.x_data, self.model, save_plot=self.save_plots, file_name=plot_name, file_path=self.plot_path
-                )
-            else:
-                plot_model_specifics(x_plot, self.x_data, self.model)
         else:
             if dimension == 1:
                 pred_mu, pred_sigma = self.model.predictive_dist(x_plot)

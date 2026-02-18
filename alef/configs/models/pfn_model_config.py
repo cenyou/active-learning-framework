@@ -14,7 +14,6 @@
 
 from typing import Optional
 from alef.configs.models.base_model_config import BaseModelConfig
-from alef.enums.global_model_enums import PredictionQuantity
 from alef.configs.models.pfn_config import PFNTorchConfig
 # config for PFN model of our API
 
@@ -22,11 +21,11 @@ class BasicPFNModelConfig(BaseModelConfig):
     pfn_backend_config: PFNTorchConfig
     checkpoint_path: Optional[str] = None
     device: str = "cpu"
-    name = "PFNModel"
+    name: str = "PFNModel"
 
 class PFNModelGPUConfig(BasicPFNModelConfig):
     pfn_backend_config: PFNTorchConfig
     checkpoint_path: Optional[str] = None
     device: str = "cuda"
-    name = "PFNModel_CUDA"
+    name: str = "PFNModel_CUDA"
 

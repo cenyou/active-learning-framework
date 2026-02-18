@@ -1,15 +1,12 @@
 import numpy as np
 import argparse
-import os
-import sys
 import logging
 import torch
 from copy import deepcopy
 from pathlib import Path
 from alef.utils.utils import string2bool
 from alef.configs.initial_data_conditions import CONSTRAINED_BOXES, INITIAL_OUTPUT_HIGHER_BY, INITIAL_OUTPUT_LOWER_BY
-from alef.configs.models.pfn_config import PFNTorchConfig
-from alef.configs.models.pfn_model_config import BasicPFNModelConfig, PFNModelGPUConfig
+from alef.configs.models.tabpfn_model_config import BasicTabPFNModelConfig, TabPFNModelGPUConfig
 from alef.models.model_factory import ModelFactory
 from alef.active_learners.pool_safe_active_learner import PoolSafeActiveLearner
 from alef.enums.active_learner_enums import ValidationType
@@ -24,11 +21,6 @@ from alef.data_sets.lgbb import LGBB
 from alef.data_sets.power_plant import PowerPlant
 
 from alef.configs.config_picker import ConfigPicker
-
-import gpflow
-gpflow.config.set_default_float(np.float64)
-gpflow.config.set_default_jitter(1e-4)
-#f64 = gpflow.utilities.to_default_float
 
 from alef.configs.paths import EXPERIMENT_PATH
 
@@ -173,11 +165,7 @@ def experiment(args):
     data_test = pool.get_random_constrained_data(n_data_test, noisy=True, constraint_lower=safe_lower, constraint_upper=safe_upper)
 
     # create models
-    model_config_class = PFNModelGPUConfig if torch.cuda.is_available() else BasicPFNModelConfig
-    model_config = model_config_class(
-        pfn_backend_config=PFNTorchConfig( input_dimension=pool.get_variable_dimension() ),
-        checkpoint_path=args.pfn_path
-    )
+    model_config = TabPFNModelGPUConfig() if torch.cuda.is_available() else BasicTabPFNModelConfig()
     model = ModelFactory.build(model_config)
     if not constraint_on_y:
         safety_models = []
@@ -195,7 +183,7 @@ def experiment(args):
             acq_config_name,
             model_config.__class__.__name__
         )
-     ) / oracle_str
+     ) / f"{oracle_str}"
 
     if not exp_path.is_dir():
         exp_path.mkdir(parents=True, exist_ok=True)

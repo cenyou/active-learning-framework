@@ -14,21 +14,12 @@
 
 from typing import Dict, List, Optional, Union
 import numpy as np
-from numpy.lib.shape_base import expand_dims
 import pandas as pd
 from pandas.plotting import scatter_matrix
 import os
 import matplotlib.pyplot as plt
 import matplotlib
 from alef.enums.data_structure_enums import OutputType
-from alef.kernels.deep_kernels.base_deep_kernel import BaseDeepKernel
-from alef.kernels.rbf_kernel import RBFKernel
-from alef.kernels.warped_kernel_interface import WarpedKernelInterface
-from alef.kernels.weighted_additive_kernel import WeightedAdditiveKernel
-from alef.models.gp_model import GPModel
-from alef.kernels.hierarchical_hyperplane_kernel import HierarchicalHyperplaneKernel
-from alef.models.gp_model_marginalized import GPModelMarginalized
-from alef.models.gp_model_scalable import GPModelScalable
 from alef.utils.plotter import Plotter, PlotterPlotly
 from alef.utils.plotter2D import Plotter2D
 from alef.utils.histogram_plotter import HistogramPlotter
@@ -841,139 +832,6 @@ def set_font_sizes(font_size, only_axis=True):
 
         matplotlib.rc("font", **font)
 
-
-def plot_model_specifics(x_grid, x_data, model, save_plot=False, file_name=None, file_path=None):
-    input_dimension = x_grid.shape[1]
-    # cmaps = ['Greens','Reds','Blues','Purples']
-    if isinstance(model, GPModel) or isinstance(model, GPModelScalable):
-        if isinstance(model.model.kernel, HierarchicalHyperplaneKernel):
-            hhk_specific_plot(x_grid, x_data, model, save_plot, file_name, file_path, input_dimension)
-
-        if isinstance(model.model.kernel, BaseDeepKernel) or isinstance(model.model.kernel, WarpedKernelInterface):
-            dimension_alligned = True
-            if isinstance(model.model.kernel, BaseDeepKernel):
-                dimension_alligned = (
-                    model.model.kernel.feature_extractor.get_input_dimension()
-                    == model.model.kernel.feature_extractor.get_output_dimension()
-                )
-            if dimension_alligned:
-                warped_kernel_specific_plot(x_grid, model.model.kernel, save_plot, file_name, file_path, input_dimension)
-
-    elif isinstance(model, GPModelMarginalized):
-        counter = 0
-        for posterior_model in model.yield_posterior_models():
-            if counter % 4 == 0:
-                if isinstance(posterior_model.kernel, BaseDeepKernel) or isinstance(posterior_model.kernel, WarpedKernelInterface):
-                    dimension_alligned = True
-                    if isinstance(posterior_model.kernel, BaseDeepKernel):
-                        dimension_alligned = (
-                            posterior_model.kernel.feature_extractor.get_input_dimension()
-                            == posterior_model.kernel.feature_extractor.get_output_dimension()
-                        )
-                    if dimension_alligned:
-                        warped_kernel_specific_plot(x_grid, posterior_model.kernel, save_plot, file_name, file_path, input_dimension)
-            counter += 1
-
-
-def hhk_specific_plot(x_grid, x_data, model, save_plot, file_name, file_path, input_dimension):
-    if input_dimension == 2:
-        classified_local_kernel = np.concatenate(model.model.kernel.gate(x_grid), axis=1)
-        sorted_classes = np.argsort(-1 * np.sum(classified_local_kernel, axis=0))
-        topology = model.model.kernel.get_topology()
-        if topology == 3:
-            plotter_object = Plotter2D(4, 2)
-        else:
-            plotter_object = Plotter2D(classified_local_kernel.shape[1])
-        levels = np.linspace(0, 1, 100)
-        if topology == 3:
-            counter = 0
-            v_index = 0
-            for class_index in sorted_classes:
-                if counter == 4:
-                    v_index = 1
-                    counter = 0
-                plotter_object.add_gt_function(
-                    x_grid, np.squeeze(classified_local_kernel[:, class_index]), "plasma", levels, counter, v_ax=v_index
-                )
-                plotter_object.add_datapoints(x_data, "red", counter, v_ax=v_index)
-                if isinstance(model.model.kernel.kernel_list[class_index], RBFKernel):
-                    lengthscales = model.model.kernel.kernel_list[class_index].kernel.lengthscales.numpy()
-                    variance = model.model.kernel.kernel_list[class_index].kernel.variance.numpy()
-                    plotter_object.add_text_box("ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter, v_ax=v_index)
-                    plotter_object.add_text_box("ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter, v_ax=v_index)
-                    plotter_object.add_text_box("var=" + "{:.2f}".format(variance[0]), 0.30, 0.68, 0.5, 17, counter, v_ax=v_index)
-                elif isinstance(model.model.kernel.kernel_list[class_index], WeightedAdditiveKernel):
-                    weights = model.model.kernel.kernel_list[class_index].get_weights()
-                    weight_str = str(["{:.2f}".format(weight) for weight in weights])
-                    plotter_object.add_text_box("w=" + weight_str, 0.30, 0.88, 0.5, 10, counter, v_ax=v_index)
-
-                counter += 1
-        else:
-            counter = 0
-            for class_index in sorted_classes:
-                plotter_object.add_gt_function(x_grid, np.squeeze(classified_local_kernel[:, class_index]), "plasma", levels, counter)
-                plotter_object.add_datapoints(x_data, "red", counter)
-                if isinstance(model.model.kernel.kernel_list[class_index], RBFKernel):
-                    lengthscales = model.model.kernel.kernel_list[class_index].kernel.lengthscales.numpy()
-                    variance = model.model.kernel.kernel_list[class_index].kernel.variance.numpy()
-                    plotter_object.add_text_box("ls_x1=" + "{:.2f}".format(lengthscales[0]), 0.30, 0.88, 0.5, 17, counter)
-                    plotter_object.add_text_box("ls_x2=" + "{:.2f}".format(lengthscales[1]), 0.30, 0.78, 0.5, 17, counter)
-                    plotter_object.add_text_box("var=" + "{:.2f}".format(variance[0]), 0.30, 0.68, 0.5, 17, counter)
-                elif isinstance(model.model.kernel.kernel_list[class_index], WeightedAdditiveKernel):
-                    weights = model.model.kernel.kernel_list[class_index].get_weights()
-                    weight_str = str(["{:.2f}".format(weight) for weight in weights])
-                    plotter_object.add_text_box("w=" + weight_str, 0.30, 0.88, 0.5, 10, counter)
-                counter += 1
-        if save_plot:
-            plotter_object.save_fig(file_path, file_name)
-        else:
-            plotter_object.show()
-
-
-def warped_kernel_specific_plot(x_grid, kernel, save_plot, file_name, file_path, input_dimension):
-    if input_dimension == 1:
-        X = x_grid
-        if isinstance(kernel, WarpedKernelInterface):
-            out = kernel.warp(X)
-        elif isinstance(kernel, BaseDeepKernel):
-            out = kernel.feature_extractor.forward(X)
-        trajectory_array = np.transpose(np.array([np.squeeze(X), np.squeeze(out)]))
-        time_array = np.array([0.0, 1.0])
-        fig, ax = plt.subplots()
-        for trajectory in trajectory_array:
-            ax.plot(time_array, trajectory)
-        if save_plot:
-            plt.tight_layout()
-            plt.savefig(os.path.join(file_path, "warp_1d_dim" + file_name))
-            plt.close()
-        else:
-            plt.show()
-    elif input_dimension == 2:
-        min_x = np.min(x_grid[:, 0])
-        max_x = np.max(x_grid[:, 0])
-        min_y = np.min(x_grid[:, 1])
-        max_y = np.max(x_grid[:, 1])
-        n_ys = 10
-        alphas = np.linspace(0.0, 1.0, n_ys)
-        ys = [alpha * min_y + (1 - alpha) * max_y for alpha in alphas]
-        cols = np.linspace(0.2, 0.8, n_ys)
-        plotter = Plotter2D(2)
-        plotter.add_datapoints(x_grid, "white", 0)
-        plotter.add_datapoints(x_grid, "white", 1)
-        for i, col in enumerate(cols):
-            line = np.expand_dims(np.linspace(min_x, max_x, 50), axis=1)
-            line = np.concatenate((line, np.expand_dims(np.repeat(ys[i], 50), axis=1)), axis=1)
-            plotter.add_datapoints(line, str(col), 0)
-            if isinstance(kernel, WarpedKernelInterface):
-                warped_line = kernel.warp(line)
-            elif isinstance(kernel, BaseDeepKernel):
-                warped_line = kernel.feature_extractor.forward(line)
-
-            plotter.add_datapoints(warped_line, str(col), 1)
-        if save_plot:
-            plotter.save_fig(file_path, "warping_2d_" + file_name)
-        else:
-            plotter.show()
 
 
 def create_box_plot_from_dict(

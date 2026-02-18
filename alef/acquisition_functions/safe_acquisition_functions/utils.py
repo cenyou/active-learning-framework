@@ -15,7 +15,6 @@
 from typing import Union, Sequence, Optional
 import numpy as np
 from scipy.stats import norm
-from gpflow.kernels import Matern52
 from alef.models.base_model import BaseModel
 
 
@@ -32,51 +31,6 @@ def get_safety_models(
         return [model]
     else:
         return safety_models
-
-
-def count_number_of_points_nearby(
-    x_grid: np.ndarray,
-    model: BaseModel,
-    safety_models: Optional[Sequence[BaseModel]] = None,
-    x_data: Optional[np.ndarray] = None,
-    y_data: Optional[np.ndarray] = None
-):
-    D = model.model.kernel.get_input_dimension()
-    
-    # the models have lengthscales, so we need the kernel values to judge distance
-    # we use the fact that matern52 is strictly decreasing
-    assert hasattr(model.model.kernel, 'prior_scale')
-    print(f'Currently \'count_number_of_points_nearby\' use Matern52 to measure data distance. If the model use other kernel, error might occur')
-    k_list = [model.model.kernel]
-    if not safety_models is None:
-        assert np.all(
-            [hasattr(sm.model.kernel, 'prior_scale') for sm in safety_models]
-        )
-        k_list.extend([sm.model.kernel for sm in safety_models])
-
-    k0 = [k.prior_scale for k in k_list]
-
-    radius = np.array([1 / 0.37974]) # lipschitz constant of matern52
-    
-    # now we have the kernel scale and kernel
-
-    radius = radius * 1/np.power(x_data.shape[0], 1/D - 0.001) if x_data.shape[0] > 0 else radius
-
-    dist = np.concatenate(
-        [k(x_data, x_grid).numpy()[None, :, :] for k in k_list],
-        axis=0
-    )# [num_models, n_training, n_pool]
-    bound = []
-    for rho, kernel_std in zip(radius, k0):
-        k = Matern52(kernel_std**2, 1)
-        bound.append( k( np.array([[0.0]]), np.array([[rho]]) ).numpy().reshape(-1)[0] )
-    bound = np.array(bound).reshape([-1, 1, 1]) # [num_models, 1, 1]
-
-    count = np.min(
-        np.sum((dist>=bound).astype(int), axis=1) # [num_models, n_pool]
-        , axis=0
-    )
-    return count
 
 
 def compute_gp_posterior(

@@ -13,13 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List, Dict, Union, Optional
-from pydantic import BaseSettings
-
-from alef.configs.means.pytorch_means import BaseMeanPytorchConfig, BasicZeroMeanPytorchConfig
-from alef.configs.kernels.pytorch_kernels.base_kernel_pytorch_config import BaseKernelPytorchConfig
-from alef.enums.active_learner_amortized_policy_enums import LengthscaleDistribution
-
-# configs for backend PFN (torch.nn.Module)
+from pydantic_settings import BaseSettings
 
 class PFNTorchConfig(BaseSettings):
     input_dimension: int

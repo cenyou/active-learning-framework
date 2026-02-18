@@ -226,13 +226,14 @@ class BaseActiveLearner(abc.ABC):
         )
 
     @abc.abstractmethod
-    def learn(self, n_steps: int):
+    def learn(self, n_steps: int, start_index: int =0):
         """
         Main Active learning loop - makes n_steps queries (calls the self.oracle object at each query) and updates the model after each query with the new x_data, y_data
         - validation is done after each query
 
         Arguments:
             n_steps : int - number of active learning iteration/number of queries
+            start_index : int - starting index for the iteration count
         Returns:
             np.array - validation metrics values over the iterations
             np.array - selected queries over the iterations

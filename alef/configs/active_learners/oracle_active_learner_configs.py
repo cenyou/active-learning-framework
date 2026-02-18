@@ -19,7 +19,7 @@ from alef.configs.acquisition_functions.al_acquisition_functions.pred_entropy_co
 from alef.configs.acquisition_functions.al_acquisition_functions.pred_variance_config import BasicPredVarianceConfig
 from alef.configs.acquisition_functions.al_acquisition_functions.pred_sigma_config import BasicPredSigmaConfig
 from alef.enums.active_learner_enums import OracleALAcquisitionOptimizationType, ValidationType
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import json
 
 

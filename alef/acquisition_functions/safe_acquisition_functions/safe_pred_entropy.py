@@ -85,10 +85,14 @@ class SafePredEntropy(StandardAlphaAcquisitionFunction):
         """
         S = self.compute_safe_set(x_grid, get_safety_models(model, safety_models))
         score = -np.inf * np.ones_like(S, dtype=float)
-        
-        ent = model.entropy_predictive_dist(x_grid[S])
-        score[S] = np.squeeze(ent)
-        
+
+        N_safe = S.sum()
+        if N_safe > 1:
+            ent = model.entropy_predictive_dist(x_grid[S])
+            score[S] = np.squeeze(ent)
+        elif N_safe == 1:
+            score[S] = 1
+
         if return_safe_set:
             return score, S
         else:
@@ -158,9 +162,13 @@ class SafePredEntropyAll(StandardAlphaAcquisitionFunction):
         S = self.compute_safe_set(x_grid, get_safety_models(model, safety_models))
         score = -np.inf * np.ones_like(S, dtype=float)
 
-        _, pred_sigma = compute_gp_posterior(x_grid[S], model, safety_models)
-        entropy = normal_entropy(pred_sigma)
-        score[S] = np.sum(entropy, axis=1)
+        N_safe = S.sum()
+        if N_safe > 1:
+            _, pred_sigma = compute_gp_posterior(x_grid[S], model, safety_models)
+            entropy = normal_entropy(pred_sigma)
+            score[S] = np.sum(entropy, axis=1)
+        elif N_safe == 1:
+            score[S] = 1
 
         if return_safe_set:
             return score, S

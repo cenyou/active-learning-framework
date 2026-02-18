@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import Tuple, Sequence, Union
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 from alef.configs.base_parameters import INPUT_DOMAIN

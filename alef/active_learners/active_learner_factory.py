@@ -15,25 +15,15 @@
 from typing import Union
 from alef.acquisition_functions.acquisition_function_factory import AcquisitionFunctionFactory
 from alef.active_learners.pool_active_learner import PoolActiveLearner
-from alef.active_learners.pool_active_learner_batch import BatchPoolActiveLearner
 from alef.active_learners.oracle_active_learner import OracleActiveLearner
-from alef.active_learners.oracle_policy_active_learner import OraclePolicyActiveLearner
-from alef.active_learners.pool_policy_active_learner import PoolPolicyActiveLearner
-from alef.active_learners.oracle_policy_safe_active_learner import OraclePolicySafeActiveLearner
-from alef.active_learners.pool_policy_safe_active_learner import PoolPolicySafeActiveLearner
 
 from alef.configs.active_learners.pool_active_learner_configs import BasicPoolActiveLearnerConfig
 from alef.configs.active_learners.oracle_active_learner_configs import BasicOracleActiveLearnerConfig
-from alef.configs.active_learners.oracle_policy_active_learner_configs import BasicOraclePolicyActiveLearnerConfig
-from alef.configs.active_learners.pool_policy_active_learner_configs import BasicPoolPolicyActiveLearnerConfig
-from alef.configs.active_learners.oracle_policy_safe_active_learner_configs import BasicOraclePolicySafeActiveLearnerConfig
-from alef.configs.active_learners.pool_policy_safe_active_learner_configs import BasicPoolPolicySafeActiveLearnerConfig
-from alef.configs.active_learners.pool_active_learner_batch_configs import BasicBatchPoolActiveLearnerConfig
 
 
 class ActiveLearnerFactory:
     @staticmethod
-    def build(active_learner_config: Union[BasicPoolActiveLearnerConfig, BasicOracleActiveLearnerConfig, BasicBatchPoolActiveLearnerConfig]):
+    def build(active_learner_config: Union[BasicPoolActiveLearnerConfig, BasicOracleActiveLearnerConfig]):
         if isinstance(active_learner_config, BasicPoolActiveLearnerConfig):
             acquisition_function_config = active_learner_config.acquisition_function_config
             acquisition_function = AcquisitionFunctionFactory.build(acquisition_function_config)
@@ -42,17 +32,5 @@ class ActiveLearnerFactory:
             acquisition_function_config = active_learner_config.acquisition_function_config
             acquisition_function = AcquisitionFunctionFactory.build(acquisition_function_config)
             return OracleActiveLearner(acquisition_function=acquisition_function, **active_learner_config.dict())
-        elif isinstance(active_learner_config, BasicOraclePolicyActiveLearnerConfig):
-            return OraclePolicyActiveLearner(**active_learner_config.dict())
-        elif isinstance(active_learner_config, BasicPoolPolicyActiveLearnerConfig):
-            return PoolPolicyActiveLearner(**active_learner_config.dict())
-        elif isinstance(active_learner_config, BasicOraclePolicySafeActiveLearnerConfig):
-            return OraclePolicySafeActiveLearner(**active_learner_config.dict())
-        elif isinstance(active_learner_config, BasicPoolPolicySafeActiveLearnerConfig):
-            return PoolPolicySafeActiveLearner(**active_learner_config.dict())
-        elif isinstance(active_learner_config, BasicBatchPoolActiveLearnerConfig):
-            acquisition_function_config = active_learner_config.acquisition_function_config
-            acquisition_function = AcquisitionFunctionFactory.build(acquisition_function_config)
-            return BatchPoolActiveLearner(acquisition_function=acquisition_function, **active_learner_config.dict())
         else:
             raise NotImplementedError("Invalid config")

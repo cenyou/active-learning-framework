@@ -19,7 +19,7 @@ from alef.configs.acquisition_functions.al_acquisition_functions.base_batch_al_a
 )
 from alef.configs.acquisition_functions.al_acquisition_functions.pred_entropy_batch_config import BasicPredEntropyBatchConfig
 from alef.enums.active_learner_enums import BatchAcquisitionOptimizationType, ValidationType
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import json
 
 
